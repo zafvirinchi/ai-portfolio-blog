@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -12,39 +15,51 @@ export default function ChatBox() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!input.trim()) return;
 
-    const userMessage: ChatMessage = {
-      role: "user",
-      content: input,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
-    setLoading(true);
-
-    const response = await fetch("/api/chat", {
-      method: "POST",
-      body: JSON.stringify({ message: input }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    const data = await response.json();
+    const currentInput = input;
 
     setMessages((prev) => [
       ...prev,
-      {
-        role: "assistant",
-        content: data.answer || "Sorry, I could not answer that.",
-      },
+      { role: "user", content: currentInput },
     ]);
 
-    setLoading(false);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ message: currentInput }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await response.json();
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            data.answer ||
+            data.error ||
+            "Sorry, I could not answer that.",
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Network/API error. Please check server console.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -56,11 +71,25 @@ export default function ChatBox() {
             className={
               message.role === "user"
                 ? "rounded-lg bg-blue-50 p-3 text-blue-900"
-                : "rounded-lg bg-gray-100 p-3 text-gray-800"
+                : "rounded-lg bg-gray-100 p-4 text-gray-800"
             }
           >
-            <strong>{message.role === "user" ? "You" : "AI"}:</strong>{" "}
-            {message.content}
+            <p className="mb-2 font-semibold">
+              {message.role === "user" ? "You" : "AI"}:
+            </p>
+
+            {message.role === "assistant" ? (
+              <div className="prose prose-sm max-w-none">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+            ) : (
+              <p>{message.content}</p>
+            )}
           </div>
         ))}
 

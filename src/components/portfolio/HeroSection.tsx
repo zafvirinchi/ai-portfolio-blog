@@ -1,44 +1,36 @@
-import ResumeButton from "./ResumeButton";
+import Link from "next/link";
 
 export default function HeroSection() {
   return (
-    <section className="px-6 py-20 md:px-16 lg:px-24">
-      <div className="mx-auto max-w-5xl">
-        <p className="mb-3 text-sm font-semibold uppercase tracking-widest text-blue-600">
-          Full Stack Java Architect-in-Progress
+    <section className="bg-gradient-to-b from-blue-50 to-white">
+      <div className="mx-auto max-w-6xl px-6 py-20">
+        <p className="mb-4 text-sm font-semibold uppercase tracking-wide text-blue-600">
+          Full Stack Developer
         </p>
 
-        <h1 className="mb-6 text-4xl font-bold leading-tight md:text-6xl">
-          Zafrul Islam
+        <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-gray-900 md:text-6xl">
+          Building scalable web apps with Java, Spring Boot, Angular, AWS and AI.
         </h1>
 
-        <h2 className="mb-6 text-xl font-semibold text-gray-700 md:text-2xl">
-          Java, Spring Boot, Angular, AWS, Microservices, AI-enabled Products
-        </h2>
-
-        <p className="mb-8 max-w-3xl text-lg leading-8 text-gray-600">
-          I design and build scalable enterprise applications with Java, Spring
-          Boot, Angular, Node.js, AWS, and microservices. My focus is on secure,
-          high-performance systems that solve real business problems across
-          government, banking, healthcare, and enterprise domains.
+        <p className="mt-6 max-w-2xl text-lg text-gray-600">
+          I write practical blogs and interview questions on Java, Spring Boot,
+          Angular, Microservices, System Design and AI-enabled development.
         </p>
 
-        <div className="flex flex-wrap gap-4">
-          <a
-            href="/projects"
-            className="rounded-lg bg-black px-6 py-3 text-white transition hover:opacity-90"
+        <div className="mt-8 flex gap-4">
+          <Link
+            href="/interview-questions"
+            className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700"
           >
-            View Projects
-          </a>
+            Explore Interview Q&A
+          </Link>
 
-          <a
-            href="/contact"
-            className="rounded-lg border border-gray-300 px-6 py-3 transition hover:bg-gray-100"
+          <Link
+            href="/blog"
+            className="rounded-lg border px-5 py-3 hover:bg-gray-50"
           >
-            Contact Me
-          </a>
-
-          <ResumeButton />
+            Read Blog
+          </Link>
         </div>
       </div>
     </section>

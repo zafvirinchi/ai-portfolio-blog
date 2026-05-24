@@ -3,109 +3,71 @@ import path from "path";
 import matter from "gray-matter";
 import readingTime from "reading-time";
 
-export type BlogFrontmatter = {
-  title: string;
-  slug: string;
-  excerpt: string;
-  publishedAt: string;
-  tags: string[];
-};
+const contentDir = path.join(process.cwd(), "src/content");
 
-export type BlogPostMeta = BlogFrontmatter & {
-  readingTime: string;
-};
+export function getBlogPosts() {
+  const blogDir = path.join(contentDir, "blog");
 
-export type BlogPost = BlogPostMeta & {
-  content: string;
-};
+  if (!fs.existsSync(blogDir)) return [];
 
-const blogDirectory = path.join(process.cwd(), "src/content/blog");
+  return fs.readdirSync(blogDir)
+    .filter((file) => file.endsWith(".mdx"))
+    .map((file) => {
+      const filePath = path.join(blogDir, file);
+      const fileContent = fs.readFileSync(filePath, "utf-8");
+      const { data, content } = matter(fileContent);
 
-function getMdxFiles(dir: string): string[] {
-  if (!fs.existsSync(dir)) return [];
-
-  return fs.readdirSync(dir).filter((file) => file.endsWith(".mdx"));
-}
-
-export function getAllPosts(): BlogPostMeta[] {
-  const files = getMdxFiles(blogDirectory);
-
-  const posts = files.map((file) => {
-    const fullPath = path.join(blogDirectory, file);
-    const source = fs.readFileSync(fullPath, "utf8");
-    const { data, content } = matter(source);
-
-    const frontmatter = data as BlogFrontmatter;
-
-    return {
-      ...frontmatter,
-      readingTime: readingTime(content).text,
-    };
-  });
-
-  return posts.sort((a, b) => {
-    return (
-      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
-  });
-}
-
-export function getPostBySlug(slug: string): BlogPost | null {
-  const files = getMdxFiles(blogDirectory);
-
-  for (const file of files) {
-    const fullPath = path.join(blogDirectory, file);
-    const source = fs.readFileSync(fullPath, "utf8");
-    const { data, content } = matter(source);
-
-    const frontmatter = data as BlogFrontmatter;
-
-    if (frontmatter.slug === slug) {
       return {
-        ...frontmatter,
+        slug: file.replace(".mdx", ""),
+        title: data.title,
+        excerpt: data.excerpt,
+        date: data.date,
+        tags: data.tags || [],
         content,
         readingTime: readingTime(content).text,
       };
-    }
-  }
-
-  return null;
+    });
 }
 
-export function getAllTags(): string[] {
-  const posts = getAllPosts();
-  const tags = posts.flatMap((post) => post.tags);
-
-  return Array.from(new Set(tags)).sort();
+export function getBlogPostBySlug(slug: string) {
+  return getBlogPosts().find((post) => post.slug === slug);
 }
 
-export function getPostsByTag(tag: string): BlogPostMeta[] {
-  return getAllPosts().filter((post) =>
-    post.tags.some((t) => t.toLowerCase() === tag.toLowerCase())
-  );
-}
+export function getInterviewCategories() {
+  const baseDir = path.join(contentDir, "interview-questions");
 
-export function getRelatedPosts(
-  currentSlug: string,
-  tags: string[],
-  limit = 3
-): BlogPostMeta[] {
-  const posts = getAllPosts().filter((post) => post.slug !== currentSlug);
+  if (!fs.existsSync(baseDir)) return [];
 
-  const scored = posts.map((post) => {
-    const commonTags = post.tags.filter((tag) =>
-      tags.map((t) => t.toLowerCase()).includes(tag.toLowerCase())
-    ).length;
-
-    return {
-      post,
-      score: commonTags,
-    };
+  return fs.readdirSync(baseDir).filter((folder) => {
+    return fs.statSync(path.join(baseDir, folder)).isDirectory();
   });
+}
 
-  return scored
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.post);
+export function getInterviewQuestionsByCategory(category: string) {
+  const categoryDir = path.join(contentDir, "interview-questions", category);
+
+  if (!fs.existsSync(categoryDir)) return [];
+
+  return fs.readdirSync(categoryDir)
+    .filter((file) => file.endsWith(".mdx"))
+    .map((file) => {
+      const filePath = path.join(categoryDir, file);
+      const fileContent = fs.readFileSync(filePath, "utf-8");
+      const { data, content } = matter(fileContent);
+
+      return {
+        slug: file.replace(".mdx", ""),
+        category,
+        title: data.title,
+        level: data.level,
+        tags: data.tags || [],
+        content,
+      };
+    });
+}
+
+export function getInterviewQuestion(category: string, slug: string) {
+  return getInterviewQuestionsByCategory(category).find(
+    (question) => question.slug === slug
+  );
 }

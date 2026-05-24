@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ResumeButton from "@/components/portfolio/ResumeButton";
 
 export default function HeroSection() {
   return (
@@ -17,7 +18,7 @@ export default function HeroSection() {
           Angular, Microservices, System Design and AI-enabled development.
         </p>
 
-        <div className="mt-8 flex gap-4">
+        <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/interview-questions"
             className="rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700"
@@ -31,6 +32,8 @@ export default function HeroSection() {
           >
             Read Blog
           </Link>
+
+          <ResumeButton />
         </div>
       </div>
     </section>

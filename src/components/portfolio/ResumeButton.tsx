@@ -1,9 +1,9 @@
 export default function ResumeButton() {
   return (
     <a
-      href="/ZafrulIslamResume_GCC.pdf"
+      href="/zafrul-islam-resume.pdf"
       download
-      className="rounded-lg border border-blue-600 px-6 py-3 text-blue-600 transition hover:bg-blue-50"
+      className="rounded-lg bg-gray-900 px-5 py-3 text-white hover:bg-gray-800"
     >
       Download Resume
     </a>

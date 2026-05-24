@@ -1,40 +1,35 @@
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 
-type BlogCardProps = {
+type QuestionCardProps = {
   slug: string;
+  category: string;
   title: string;
-  excerpt: string;
-  date: string;
-  readingTime: string;
+  level: string;
   tags: string[];
 };
 
-export default function BlogCard({
+export default function QuestionCard({
   slug,
+  category,
   title,
-  excerpt,
-  date,
-  readingTime,
+  level,
   tags,
-}: BlogCardProps) {
+}: QuestionCardProps) {
   return (
     <Link
-      href={`/blog/${slug}`}
+      href={`/interview-questions/${category}/${slug}`}
       className="rounded-xl border p-6 shadow-sm transition hover:shadow-md"
     >
       <h2 className="text-2xl font-semibold">{title}</h2>
-      <p className="mt-3 text-gray-600">{excerpt}</p>
+
+      <p className="mt-3 text-sm text-gray-500">Level: {level}</p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         {tags.map((tag) => (
           <Badge key={tag}>{tag}</Badge>
         ))}
       </div>
-
-      <p className="mt-4 text-sm text-gray-500">
-        {date} · {readingTime}
-      </p>
     </Link>
   );
 }

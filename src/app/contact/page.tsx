@@ -1,3 +1,5 @@
+import ContactForm from "@/components/contact/ContactForm";
+
 export default function ContactPage() {
   return (
     <section className="mx-auto max-w-3xl px-6 py-16">
@@ -8,11 +10,7 @@ export default function ContactPage() {
         discussions or project work.
       </p>
 
-      <div className="mt-8 rounded-xl border p-6">
-        <p>Email: zafrul.techstack75@gmail.com</p>
-        <p className="mt-2">GitHub: github.com/zafvirinchi</p>
-        <p className="mt-2">LinkedIn: Add your LinkedIn URL here</p>
-      </div>
+      <ContactForm />
     </section>
   );
 }

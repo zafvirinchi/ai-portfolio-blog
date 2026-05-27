@@ -1,39 +1,42 @@
 import Link from "next/link";
-import Badge from "@/components/ui/Badge";
 
 type BlogCardProps = {
   slug: string;
   title: string;
-  excerpt: string;
-  date: string;
-  readingTime: string;
+  excerpt: string | null;
   tags: string[];
+  created_at: string;
 };
 
 export default function BlogCard({
   slug,
   title,
   excerpt,
-  date,
-  readingTime,
   tags,
+  created_at,
 }: BlogCardProps) {
   return (
     <Link
       href={`/blog/${slug}`}
-      className="rounded-xl border p-6 shadow-sm transition hover:shadow-md"
+      className="rounded-2xl border bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg"
     >
-      <h2 className="text-2xl font-semibold">{title}</h2>
-      <p className="mt-3 text-gray-600">{excerpt}</p>
+      <h2 className="text-2xl font-bold">{title}</h2>
+
+      {excerpt && <p className="mt-3 text-gray-600">{excerpt}</p>}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {tags.map((tag) => (
-          <Badge key={tag}>{tag}</Badge>
+        {tags?.map((tag) => (
+          <span
+            key={tag}
+            className="rounded-full bg-blue-50 px-3 py-1 text-xs text-blue-700"
+          >
+            {tag}
+          </span>
         ))}
       </div>
 
-      <p className="mt-4 text-sm text-gray-500">
-        {date} · {readingTime}
+      <p className="mt-5 text-sm text-gray-500">
+        {new Date(created_at).toDateString()}
       </p>
     </Link>
   );

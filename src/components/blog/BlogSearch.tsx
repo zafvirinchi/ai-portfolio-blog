@@ -3,17 +3,21 @@
 import { useState } from "react";
 import BlogCard from "@/components/blog/BlogCard";
 import SearchBox from "@/components/ui/SearchBox";
-import { BlogPost } from "@/types/blog";
+import { Blog } from "@/types/blog";
 
 type BlogSearchProps = {
-  posts: BlogPost[];
+  posts: Blog[];
 };
 
 export default function BlogSearch({ posts }: BlogSearchProps) {
   const [query, setQuery] = useState("");
 
   const filteredPosts = posts.filter((post) => {
-    const text = `${post.title} ${post.excerpt} ${post.tags.join(" ")}`.toLowerCase();
+    const tagsText = post.tags?.join(" ") || "";
+
+    const text =
+      `${post.title} ${post.excerpt ?? ""} ${tagsText}`.toLowerCase();
+
     return text.includes(query.toLowerCase());
   });
 
@@ -29,7 +33,11 @@ export default function BlogSearch({ posts }: BlogSearchProps) {
 
       <div className="mt-10 grid gap-6 md:grid-cols-2">
         {filteredPosts.map((post) => (
-          <BlogCard key={post.slug} {...post} />
+          <BlogCard
+            key={post.slug}
+            {...post}
+            tags={post.tags ?? []}
+          />
         ))}
       </div>
 

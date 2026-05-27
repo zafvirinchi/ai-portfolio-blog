@@ -1,9 +1,12 @@
-export type BlogPost = {
+export type Blog = {
+  id: string;
   slug: string;
   title: string;
-  excerpt: string;
-  date: string;
-  tags: string[];
+  excerpt: string | null;
   content: string;
-  readingTime: string;
+  tags: string[] | null;
+  cover_image: string | null;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
 };

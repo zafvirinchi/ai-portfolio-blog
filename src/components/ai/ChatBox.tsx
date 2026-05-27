@@ -31,7 +31,7 @@ export default function ChatBox() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      const response = await fetch("/api/ai/chat", {
         method: "POST",
         body: JSON.stringify({ message: currentInput }),
         headers: { "Content-Type": "application/json" },

@@ -1,21 +1,33 @@
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { InterviewCategory } from "@/types/interview";
 
 export async function getInterviewCategories(): Promise<InterviewCategory[]> {
-  console.log("Fetching interview categories...");
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("interview_categories")
     .select("*")
-    .eq("is_active", true)
     .order("sort_order", { ascending: true });
 
   if (error) {
-    console.error("CATEGORY ERROR:", error.message);
+    console.error("getInterviewCategories error:", error.message);
     return [];
   }
 
-  console.log("CATEGORY DATA:", data);
-
   return data || [];
+}
+
+export async function getInterviewCategoryById(
+  id: string
+): Promise<InterviewCategory | null> {
+  const { data, error } = await supabaseAdmin
+    .from("interview_categories")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.error("getInterviewCategoryById error:", error.message);
+    return null;
+  }
+
+  return data;
 }

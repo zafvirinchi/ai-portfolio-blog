@@ -2,11 +2,19 @@ import Link from "next/link";
 
 const navItems = [
   { href: "/admin", label: "Dashboard" },
+
+  // Interview Management
   { href: "/admin/interview-categories", label: "Categories" },
   { href: "/admin/interview-topics", label: "Topics" },
-  { href: "/admin/interview-questions", label: "Questions" },
+  { href: "/admin/interview-questions", label: "Interview Questions" },
+
+  // Blog Management
   { href: "/admin/blogs", label: "Blogs" },
+
+  // Portfolio Management
   { href: "/admin/projects", label: "Projects" },
+
+  // AI / RAG Management
   { href: "/admin/rag-documents", label: "RAG Documents" },
 ];
 
@@ -22,7 +30,7 @@ export default function AdminSidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+            className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-blue-50 hover:text-blue-700"
           >
             {item.label}
           </Link>

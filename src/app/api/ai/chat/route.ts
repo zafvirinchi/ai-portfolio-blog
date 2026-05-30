@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { openai } from "@/lib/ai/openai";
+import { searchRagContext } from "@/lib/ai/retrieval";
 
 export async function POST(req: Request) {
   try {
@@ -7,41 +8,51 @@ export async function POST(req: Request) {
 
     if (!message) {
       return NextResponse.json(
-        { answer: "Message is required." },
+        { error: "Message is required" },
         { status: 400 }
       );
     }
 
+    const chunks = await searchRagContext(message);
+
+    const context = chunks
+      .map((chunk: any, index: number) => `Context ${index + 1}:\n${chunk.chunk_text}`)
+      .join("\n\n");
+
     const response = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content:
-            "You are an AI assistant for Zafrul Islam's portfolio website. Help with Java, Spring Boot, Angular, Microservices, AWS and interview preparation.",
+          content: `
+You are Zafrul Islam's AI portfolio assistant.
+Answer using the provided context only when relevant.
+Help users understand Zafrul's experience, projects, blogs, skills, and interview preparation content.
+If context is missing, say that the information is not available in the knowledge base.
+          `,
         },
         {
           role: "user",
-          content: message,
+          content: `
+Question:
+${message}
+
+Relevant Context:
+${context}
+          `,
         },
       ],
     });
 
     return NextResponse.json({
-      answer:
-        response.choices[0]?.message?.content ||
-        "I received your question, but no answer was generated.",
+      answer: response.choices[0]?.message?.content || "No answer generated.",
+      sources: chunks,
     });
-  } catch (error: unknown) {
-    console.error("AI_CHAT_ERROR:", error);
+  } catch (error) {
+    console.error("AI chat error:", error);
 
     return NextResponse.json(
-      {
-        answer:
-          error instanceof Error
-            ? error.message
-            : "AI service error. Please check API key, base URL and model name.",
-      },
+      { error: error instanceof Error ? error.message : "AI chat failed" },
       { status: 500 }
     );
   }

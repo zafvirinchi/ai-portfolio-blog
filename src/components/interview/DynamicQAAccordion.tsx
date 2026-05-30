@@ -1,8 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { InterviewQuestion } from "@/types/interview";
 
 type Props = {
@@ -11,6 +14,21 @@ type Props = {
 
 export default function DynamicQAAccordion({ questions }: Props) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function handleCopy(id: string, code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedId(id);
+
+      setTimeout(() => {
+        setCopiedId(null);
+      }, 2000);
+    } catch (error) {
+      console.error("Copy failed:", error);
+      alert("Failed to copy code.");
+    }
+  }
 
   return (
     <div className="mt-8 space-y-4">
@@ -20,6 +38,7 @@ export default function DynamicQAAccordion({ questions }: Props) {
         return (
           <div key={item.id} className="rounded-xl border bg-white shadow-sm">
             <button
+              type="button"
               onClick={() => setOpenId(isOpen ? null : item.id)}
               className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
             >
@@ -51,12 +70,14 @@ export default function DynamicQAAccordion({ questions }: Props) {
 
                 {item.diagram_url && (
                   <figure className="mb-6 rounded-xl border bg-gray-50 p-4">
-                    <img
-                      src={item.diagram_url}
-                      alt={item.diagram_caption || item.question}
-                      className="mx-auto h-auto w-full max-w-2xl max-h-[350px] rounded-lg object-contain shadow-sm"
-        
-                    />
+                    <div className="relative mx-auto h-[350px] w-full max-w-2xl">
+                      <Image
+                        src={item.diagram_url}
+                        alt={item.diagram_caption || item.question}
+                        fill
+                        className="rounded-lg object-contain shadow-sm"
+                      />
+                    </div>
 
                     {item.diagram_caption && (
                       <figcaption className="mt-3 text-center text-sm text-gray-500">
@@ -71,6 +92,40 @@ export default function DynamicQAAccordion({ questions }: Props) {
                     {item.answer}
                   </ReactMarkdown>
                 </div>
+
+                {item.code_example && (
+                  <div className="mt-6 overflow-hidden rounded-xl border border-slate-700">
+                    <div className="flex items-center justify-between bg-slate-900 px-4 py-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                        {item.code_language || "java"}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopy(item.id, item.code_example || "")
+                        }
+                        className="rounded-md bg-slate-700 px-3 py-1 text-xs font-medium text-white transition hover:bg-slate-600"
+                      >
+                        {copiedId === item.id ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+
+                    <SyntaxHighlighter
+                      language={item.code_language || "java"}
+                      style={vscDarkPlus}
+                      showLineNumbers
+                      customStyle={{
+                        margin: 0,
+                        padding: "1.25rem",
+                        fontSize: "14px",
+                        borderRadius: 0,
+                      }}
+                    >
+                      {item.code_example}
+                    </SyntaxHighlighter>
+                  </div>
+                )}
               </div>
             )}
           </div>

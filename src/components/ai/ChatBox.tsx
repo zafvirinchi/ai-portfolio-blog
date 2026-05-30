@@ -1,114 +1,77 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
 
-type ChatMessage = {
+type Message = {
   role: "user" | "assistant";
   content: string;
 };
 
 export default function ChatBox() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
 
     if (!input.trim()) return;
 
-    const currentInput = input;
+    const userMessage = input.trim();
 
-    setMessages((prev) => [
-      ...prev,
-      { role: "user", content: currentInput },
-    ]);
-
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setInput("");
     setLoading(true);
 
-    try {
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: currentInput }),
-        headers: { "Content-Type": "application/json" },
-      });
+    const response = await fetch("/api/ai/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: userMessage }),
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            data.answer ||
-            data.error ||
-            "Sorry, I could not answer that.",
-        },
-      ]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Network/API error. Please check server console.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        content: data.answer || data.error || "Something went wrong.",
+      },
+    ]);
+
+    setLoading(false);
   }
 
   return (
-    <div className="mt-8 rounded-xl border bg-white p-4">
-      <div className="min-h-[300px] space-y-4">
+    <div className="rounded-2xl border bg-white p-5">
+      <div className="h-[420px] space-y-4 overflow-y-auto rounded-xl border p-4">
         {messages.map((message, index) => (
           <div
             key={index}
             className={
               message.role === "user"
-                ? "rounded-lg bg-blue-50 p-3 text-blue-900"
-                : "rounded-lg bg-gray-100 p-4 text-gray-800"
+                ? "ml-auto max-w-[80%] rounded-xl bg-blue-600 p-3 text-white"
+                : "mr-auto max-w-[80%] rounded-xl bg-slate-100 p-3 text-slate-900"
             }
           >
-            <p className="mb-2 font-semibold">
-              {message.role === "user" ? "You" : "AI"}:
-            </p>
-
-            {message.role === "assistant" ? (
-              <div className="prose prose-sm max-w-none">
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeHighlight]}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <p>{message.content}</p>
-            )}
+            {message.content}
           </div>
         ))}
 
-        {loading && <p className="text-sm text-gray-500">AI is thinking...</p>}
+        {loading && <p className="text-sm text-gray-500">Thinking...</p>}
       </div>
 
       <form onSubmit={handleSubmit} className="mt-4 flex gap-3">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about Java, Spring Boot, Angular..."
+          placeholder="Ask about Zafrul's skills, projects, blogs..."
           className="flex-1 rounded-xl border px-4 py-3"
         />
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded-xl bg-blue-600 px-5 py-3 text-white disabled:opacity-50"
-        >
+        <button className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white">
           Send
         </button>
       </form>

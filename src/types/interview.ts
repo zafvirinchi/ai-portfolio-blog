@@ -31,8 +31,13 @@ export type InterviewQuestion = {
   tags: string[];
   sort_order: number;
   is_published: boolean;
+
+  code_example?: string | null;
+  code_language?: string | null;
+
   diagram_url?: string | null;
   diagram_caption?: string | null;
+
   created_at?: string;
   updated_at?: string;
 };

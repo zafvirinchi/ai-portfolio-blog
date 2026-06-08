@@ -27,29 +27,39 @@ export default function InterviewCategoryForm({ item }: Props) {
       is_active: formData.get("is_active") === "on",
     };
 
-    const url = item
-      ? `/api/admin/interview-categories/${item.id}`
-      : "/api/admin/interview-categories";
+    try {
+      const url = item
+        ? `/api/admin/interview-categories/${item.id}`
+        : "/api/admin/interview-categories";
 
-    const method = item ? "PUT" : "POST";
+      const method = item ? "PUT" : "POST";
 
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    const result = await response.json();
+      const result = await response.json();
 
-    setLoading(false);
+      if (!response.ok) {
+        console.error("API Error:", result);
+        alert(result.error || "Something went wrong.");
+        return;
+      }
 
-    if (!response.ok) {
-      alert(result.error || "Something went wrong.");
-      return;
+      alert(item ? "Category updated successfully" : "Category created successfully");
+
+      router.push("/admin/interview-categories");
+      router.refresh();
+    } catch (error) {
+      console.error("Submit Error:", error);
+      alert("Something went wrong.");
+    } finally {
+      setLoading(false);
     }
-
-    router.push("/admin/interview-categories");
-    router.refresh();
   }
 
   return (

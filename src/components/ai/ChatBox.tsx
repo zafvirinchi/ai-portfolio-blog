@@ -19,59 +19,111 @@ export default function ChatBox() {
 
     const userMessage = input.trim();
 
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    const updatedMessages: Message[] = [
+      ...messages,
+      { role: "user", content: userMessage },
+    ];
+
+    setMessages(updatedMessages);
     setInput("");
     setLoading(true);
 
-    const response = await fetch("/api/ai/chat", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message: userMessage }),
-    });
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          history: messages,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        content: data.answer || data.error || "Something went wrong.",
-      },
-    ]);
+      setMessages([
+        ...updatedMessages,
+        {
+          role: "assistant",
+          content: data.answer || data.error || "Something went wrong.",
+        },
+      ]);
+    } catch (error) {
+      console.error(error);
 
-    setLoading(false);
+      setMessages([
+        ...updatedMessages,
+        {
+          role: "assistant",
+          content: "Something went wrong. Please try again.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <div className="rounded-2xl border bg-white p-5">
-      <div className="h-[420px] space-y-4 overflow-y-auto rounded-xl border p-4">
+    <div className="overflow-hidden rounded-[1.5rem] border border-pink-200 bg-white shadow-xl">
+      <div className="flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-4 text-white">
+        <div>
+          <h2 className="text-xl font-bold">Tona&apos;s Birthday Chat 💐</h2>
+          <p className="text-sm text-pink-100">
+            Ask anything and unlock your surprise
+          </p>
+        </div>
+
+        <div className="rounded-full bg-white/20 px-4 py-2 text-sm">
+          💖 Online
+        </div>
+      </div>
+
+      <div className="h-[460px] space-y-5 overflow-y-auto bg-[radial-gradient(circle_at_top_left,_#ffe4ec,_transparent_35%),radial-gradient(circle_at_bottom_right,_#fecdd3,_transparent_30%)] p-6">
+        {messages.length === 0 && (
+          <div className="mx-auto max-w-md rounded-2xl border border-pink-200 bg-white/80 p-6 text-center shadow">
+            <div className="text-5xl">🌹</div>
+            <h3 className="mt-4 text-2xl font-bold text-slate-900">
+              Welcome Beautiful
+            </h3>
+            <p className="mt-2 text-slate-600">
+              Start with: <b>Hi, my name is Zafrul</b>
+            </p>
+          </div>
+        )}
+
         {messages.map((message, index) => (
           <div
             key={index}
             className={
               message.role === "user"
-                ? "ml-auto max-w-[80%] rounded-xl bg-blue-600 p-3 text-white"
-                : "mr-auto max-w-[80%] rounded-xl bg-slate-100 p-3 text-slate-900"
+                ? "ml-auto max-w-[78%] rounded-2xl rounded-tr-sm bg-gradient-to-r from-pink-500 to-rose-500 px-5 py-3 text-white shadow"
+                : "mr-auto max-w-[78%] rounded-2xl rounded-tl-sm border border-pink-100 bg-white px-5 py-4 text-slate-800 shadow"
             }
           >
-            {message.content}
+            <p className="whitespace-pre-line leading-7">{message.content}</p>
           </div>
         ))}
 
-        {loading && <p className="text-sm text-gray-500">Thinking...</p>}
+        {loading && (
+          <div className="mr-auto max-w-[75%] rounded-2xl border border-pink-100 bg-white px-5 py-4 text-slate-600 shadow">
+            Thinking with love... 💕
+          </div>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-4 flex gap-3">
+      <form onSubmit={handleSubmit} className="flex gap-3 border-t border-pink-100 bg-white p-4">
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about Zafrul's skills, projects, blogs..."
-          className="flex-1 rounded-xl border px-4 py-3"
+          placeholder="Type your answer here..."
+          className="flex-1 rounded-2xl border border-pink-200 px-5 py-3 outline-none focus:border-pink-500"
         />
 
-        <button className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white">
+        <button
+          disabled={loading}
+          className="rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 px-7 py-3 font-semibold text-white shadow hover:opacity-90 disabled:opacity-50"
+        >
           Send
         </button>
       </form>

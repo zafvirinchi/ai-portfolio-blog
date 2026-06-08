@@ -6,10 +6,10 @@ import { InterviewCategory, InterviewTopic } from "@/types/interview";
 
 type Props = {
   item?: InterviewTopic | null;
-  categories: InterviewCategory[];
+  categories?: InterviewCategory[];
 };
 
-export default function InterviewTopicForm({ item, categories }: Props) {
+export default function InterviewTopicForm({ item, categories = [], }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 

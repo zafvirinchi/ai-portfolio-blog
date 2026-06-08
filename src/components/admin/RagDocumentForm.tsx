@@ -60,6 +60,7 @@ export default function RagDocumentForm() {
         <option value="project">Project</option>
         <option value="blog">Blog</option>
         <option value="interview">Interview Q&A</option>
+        <option value="birthday">Birthday Surprise</option>
       </select>
 
       <input

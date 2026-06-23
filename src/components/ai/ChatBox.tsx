@@ -65,30 +65,46 @@ export default function ChatBox() {
   }
 
   return (
-    <div className="overflow-hidden rounded-[1.5rem] border border-pink-200 bg-white shadow-xl">
-      <div className="flex items-center justify-between bg-gradient-to-r from-pink-500 to-rose-500 px-6 py-4 text-white">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-6 py-4 text-white">
         <div>
-          <h2 className="text-xl font-bold">Tona&apos;s Birthday Chat 💐</h2>
-          <p className="text-sm text-pink-100">
-            Ask anything and unlock your surprise
+          <h2 className="text-xl font-bold">AI Assistant</h2>
+          <p className="text-sm text-slate-300">
+            Ask about Zafrul&apos;s profile, projects, blogs and interview prep
           </p>
         </div>
 
-        <div className="rounded-full bg-white/20 px-4 py-2 text-sm">
-          💖 Online
-        </div>
+        <span className="rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-300">
+          Online
+        </span>
       </div>
 
-      <div className="h-[460px] space-y-5 overflow-y-auto bg-[radial-gradient(circle_at_top_left,_#ffe4ec,_transparent_35%),radial-gradient(circle_at_bottom_right,_#fecdd3,_transparent_30%)] p-6">
+      <div className="h-[520px] space-y-5 overflow-y-auto bg-slate-50 p-6">
         {messages.length === 0 && (
-          <div className="mx-auto max-w-md rounded-2xl border border-pink-200 bg-white/80 p-6 text-center shadow">
-            <div className="text-5xl">🌹</div>
-            <h3 className="mt-4 text-2xl font-bold text-slate-900">
-              Welcome Beautiful
+          <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+            <h3 className="text-2xl font-bold text-slate-900">
+              How can I help you?
             </h3>
-            <p className="mt-2 text-slate-600">
-              Start with: <b>Hi, my name is Zafrul</b>
+
+            <p className="mt-3 text-slate-600">
+              Try asking about Java, Spring Boot, Angular, projects, blogs,
+              system design, or Zafrul&apos;s experience.
             </p>
+
+            <div className="mt-5 flex flex-wrap justify-center gap-2 text-sm">
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                Java
+              </span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                Spring Boot
+              </span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                Angular
+              </span>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
+                Projects
+              </span>
+            </div>
           </div>
         )}
 
@@ -97,8 +113,8 @@ export default function ChatBox() {
             key={index}
             className={
               message.role === "user"
-                ? "ml-auto max-w-[78%] rounded-2xl rounded-tr-sm bg-gradient-to-r from-pink-500 to-rose-500 px-5 py-3 text-white shadow"
-                : "mr-auto max-w-[78%] rounded-2xl rounded-tl-sm border border-pink-100 bg-white px-5 py-4 text-slate-800 shadow"
+                ? "ml-auto max-w-[78%] rounded-2xl rounded-tr-sm bg-blue-600 px-5 py-3 text-white shadow-sm"
+                : "mr-auto max-w-[78%] rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-5 py-4 text-slate-800 shadow-sm"
             }
           >
             <p className="whitespace-pre-line leading-7">{message.content}</p>
@@ -106,23 +122,26 @@ export default function ChatBox() {
         ))}
 
         {loading && (
-          <div className="mr-auto max-w-[75%] rounded-2xl border border-pink-100 bg-white px-5 py-4 text-slate-600 shadow">
-            Thinking with love... 💕
+          <div className="mr-auto max-w-[75%] rounded-2xl border border-slate-200 bg-white px-5 py-4 text-slate-600 shadow-sm">
+            Thinking...
           </div>
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex gap-3 border-t border-pink-100 bg-white p-4">
+      <form
+        onSubmit={handleSubmit}
+        className="flex gap-3 border-t border-slate-200 bg-white p-4"
+      >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your answer here..."
-          className="flex-1 rounded-2xl border border-pink-200 px-5 py-3 outline-none focus:border-pink-500"
+          placeholder="Ask about Java, Spring Boot, Angular, projects..."
+          className="flex-1 rounded-xl border border-slate-300 px-5 py-3 outline-none focus:border-blue-500"
         />
 
         <button
           disabled={loading}
-          className="rounded-2xl bg-gradient-to-r from-pink-500 to-rose-500 px-7 py-3 font-semibold text-white shadow hover:opacity-90 disabled:opacity-50"
+          className="rounded-xl bg-blue-600 px-7 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           Send
         </button>

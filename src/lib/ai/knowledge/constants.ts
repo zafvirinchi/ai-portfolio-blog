@@ -1,0 +1,15 @@
+export const KNOWLEDGE_SOURCES = {
+
+  PROJECTS: "PROJECTS",
+
+  BLOGS: "BLOGS",
+
+  INTERVIEW: "INTERVIEW",
+
+  RESUME: "RESUME",
+
+  CERTIFICATIONS: "CERTIFICATIONS",
+
+  RAG: "RAG",
+
+} as const;

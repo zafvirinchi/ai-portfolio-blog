@@ -1,42 +1,67 @@
+import { openai } from "@/lib/ai/openai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { createEmbedding } from "./embeddings";
+import { RagChunk } from "@/types/ai";
 
-function getSearchTerms(question: string) {
-  const q = question.toLowerCase();
+const MAX_MATCHES = 15;
 
-  if (q.includes("certification") || q.includes("certified")) {
-    return "certifications";
-  }
+export async function searchRagContext(
+  query: string
+): Promise<RagChunk[]> {
+  try {
+    if (!query.trim()) {
+      return [];
+    }
 
-  if (q.includes("project") || q.includes("worked on")) {
-    return "projects";
-  }
+    const embeddingResponse =
+      await openai.embeddings.create({
+        model: "text-embedding-3-small",
+        input: query,
+      });
 
-  if (q.includes("skill") || q.includes("technology")) {
-    return "skills";
-  }
+    const embedding =
+      embeddingResponse.data[0].embedding;
 
-  if (q.includes("who is") || q.includes("about")) {
-    return "Zafrul Islam";
-  }
+    const { data, error } =
+      await supabaseAdmin.rpc(
+        "match_rag_chunks",
+        {
+          query_embedding: embedding,
+          match_count: MAX_MATCHES,
+        }
+      );
 
-  return question;
-}
+    if (error) {
+      console.error(error.message);
+      return [];
+    }
 
-export async function searchRagContext(question: string) {
-  const embedding = await createEmbedding(question);
-  const queryText = getSearchTerms(question);
+    const chunks =
+      (data ?? []) as RagChunk[];
 
-  const { data, error } = await supabaseAdmin.rpc("match_rag_chunks", {
-    query_embedding: embedding,
-    query_text: queryText,
-    match_count: 15,
-  });
+    const uniqueChunks: RagChunk[] =
+      Array.from(
+        new Map<string, RagChunk>(
+          chunks.map((chunk) => [
+            chunk.chunk_text,
+            chunk,
+          ])
+        ).values()
+      );
 
-  if (error) {
-    console.error("RAG search error:", error.message);
+    uniqueChunks.sort(
+      (a, b) =>
+        (b.similarity ?? 0) -
+        (a.similarity ?? 0)
+    );
+
+    return uniqueChunks;
+  } catch (error) {
+    console.error(error);
     return [];
   }
-
-  return data || [];
 }
+
+/**
+ * Converts chunks into
+ * one clean prompt context
+ */

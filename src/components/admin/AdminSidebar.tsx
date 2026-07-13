@@ -16,6 +16,7 @@ const navItems = [
 
   // AI / RAG Management
   { href: "/admin/rag-documents", label: "RAG Documents" },
+  { href: "/admin/knowledge", label: "Knowledge Base" },
 ];
 
 export default function AdminSidebar() {

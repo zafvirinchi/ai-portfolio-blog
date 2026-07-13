@@ -31,6 +31,11 @@ const cards = [
     title: "RAG Documents",
     desc: "Manage AI assistant knowledge base.",
   },
+  {
+    href: "/admin/knowledge",
+    title: "Knowledge Base",
+    desc: "Upload, search and manage PDF/DOCX/TXT/Markdown documents.",
+  },
 ];
 
 export default function AdminPage() {

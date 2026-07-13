@@ -6,6 +6,7 @@ const links = [
   { href: "/interview-questions", label: "Interview Q&A" },
   { href: "/projects", label: "Projects" },
   { href: "/ai", label: "AI Assistant" },
+  { href: "/resume-analyzer", label: "Resume Analyzer" },
   { href: "/contact", label: "Contact" },
 ];
 

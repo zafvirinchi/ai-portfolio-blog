@@ -7,7 +7,26 @@ type Message = {
   content: string;
 };
 
-export default function ChatBox() {
+type ChatBoxProps = {
+  /** When set, resume-aware questions are answered using this uploaded resume (see /resume-analyzer). */
+  resumeId?: string;
+  title?: string;
+  subtitle?: string;
+  placeholder?: string;
+  suggestions?: string[];
+  emptyStateTitle?: string;
+  emptyStateBody?: string;
+};
+
+export default function ChatBox({
+  resumeId,
+  title = "AI Assistant",
+  subtitle = "Ask about Zafrul's profile, projects, blogs and interview prep",
+  placeholder = "Ask about Java, Spring Boot, Angular, projects...",
+  suggestions = ["Java", "Spring Boot", "Angular", "Projects"],
+  emptyStateTitle = "How can I help you?",
+  emptyStateBody = "Try asking about Java, Spring Boot, Angular, projects, blogs, system design, or Zafrul's experience.",
+}: ChatBoxProps = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,6 +56,7 @@ export default function ChatBox() {
         body: JSON.stringify({
           message: userMessage,
           history: messages,
+          ...(resumeId ? { resumeId } : {}),
         }),
       });
 
@@ -68,10 +88,8 @@ export default function ChatBox() {
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 px-6 py-4 text-white">
         <div>
-          <h2 className="text-xl font-bold">AI Assistant</h2>
-          <p className="text-sm text-slate-300">
-            Ask about Zafrul&apos;s profile, projects, blogs and interview prep
-          </p>
+          <h2 className="text-xl font-bold">{title}</h2>
+          <p className="text-sm text-slate-300">{subtitle}</p>
         </div>
 
         <span className="rounded-full bg-green-500/20 px-3 py-1 text-xs font-semibold text-green-300">
@@ -83,27 +101,20 @@ export default function ChatBox() {
         {messages.length === 0 && (
           <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
             <h3 className="text-2xl font-bold text-slate-900">
-              How can I help you?
+              {emptyStateTitle}
             </h3>
 
-            <p className="mt-3 text-slate-600">
-              Try asking about Java, Spring Boot, Angular, projects, blogs,
-              system design, or Zafrul&apos;s experience.
-            </p>
+            <p className="mt-3 text-slate-600">{emptyStateBody}</p>
 
             <div className="mt-5 flex flex-wrap justify-center gap-2 text-sm">
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
-                Java
-              </span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
-                Spring Boot
-              </span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
-                Angular
-              </span>
-              <span className="rounded-full bg-blue-50 px-3 py-1 text-blue-700">
-                Projects
-              </span>
+              {suggestions.map((suggestion) => (
+                <span
+                  key={suggestion}
+                  className="rounded-full bg-blue-50 px-3 py-1 text-blue-700"
+                >
+                  {suggestion}
+                </span>
+              ))}
             </div>
           </div>
         )}
@@ -135,7 +146,7 @@ export default function ChatBox() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about Java, Spring Boot, Angular, projects..."
+          placeholder={placeholder}
           className="flex-1 rounded-xl border border-slate-300 px-5 py-3 outline-none focus:border-blue-500"
         />
 

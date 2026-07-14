@@ -17,6 +17,11 @@ const cards = [
     desc: "Create, update and publish Q&A content.",
   },
   {
+    href: "/admin/interview-import",
+    title: "Interview Import",
+    desc: "Upload a PDF/DOCX/TXT to auto-extract and import interview Q&A.",
+  },
+  {
     href: "/admin/blogs",
     title: "Blogs",
     desc: "Write and manage technical blog articles.",

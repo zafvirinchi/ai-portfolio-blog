@@ -11,7 +11,7 @@ const INTENT_DESCRIPTIONS: Record<PlannerIntent, string> = {
     "Questions about Zafrul's projects, client work, applications, or systems he has built.",
   blog: "Questions about Zafrul's blog posts or articles.",
   interview:
-    "Requests for interview questions, mock interview prep, or Q&A style technical prep content.",
+    "Requests for interview questions, mock interview prep, or Q&A style technical prep content — including specific technical interview topics such as Java, Spring/Spring Boot, Angular, React, Node, databases/SQL, Kafka, coding questions, system design, and behavioral interview questions.",
   resume:
     "Requests for Zafrul's resume/CV/work history, OR questions about an uploaded resume — ATS score, skill gaps, strengths/weaknesses, career level, suitable roles, or improvement suggestions.",
   certification: "Questions about Zafrul's certifications or certificates.",

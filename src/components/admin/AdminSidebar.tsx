@@ -7,6 +7,7 @@ const navItems = [
   { href: "/admin/interview-categories", label: "Categories" },
   { href: "/admin/interview-topics", label: "Topics" },
   { href: "/admin/interview-questions", label: "Interview Questions" },
+  { href: "/admin/interview-import", label: "Interview Import" },
 
   // Blog Management
   { href: "/admin/blogs", label: "Blogs" },

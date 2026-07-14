@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getInterviewCategories } from "@/lib/admin/interview-category-service";
 import PageHeader from "@/components/ui/PageHeader";
 import ContentCard from "@/components/ui/ContentCard";
@@ -12,6 +13,23 @@ export default async function InterviewQuestionsPage() {
         title="Topic-wise Interview Questions"
         description="Prepare with structured questions and answers across Java, Spring Boot, Angular, Microservices, AWS, Kafka, React, AI and System Design."
       />
+
+      <Link
+        href="/interview-questions/chat"
+        className="mt-8 flex flex-col items-start justify-between gap-4 rounded-2xl bg-gradient-to-r from-slate-900 to-blue-900 p-6 text-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg md:flex-row md:items-center"
+      >
+        <div>
+          <h2 className="text-xl font-bold">Interview AI Chat</h2>
+          <p className="mt-2 text-sm text-slate-300">
+            Ask any interview question and get instant answers from the
+            imported question bank.
+          </p>
+        </div>
+
+        <span className="rounded-full bg-white/10 px-5 py-2 text-sm font-semibold whitespace-nowrap">
+          Start chatting →
+        </span>
+      </Link>
 
       {categories.length === 0 && (
         <div className="mt-10 rounded-2xl border border-yellow-200 bg-yellow-50 p-6 text-yellow-800">

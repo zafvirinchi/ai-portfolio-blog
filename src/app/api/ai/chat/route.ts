@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { conversationService } from "@/lib/ai/services/conversation.service";
 import { resumeRequestContext } from "@/lib/ai/resume";
+import { interviewSourcesContext } from "@/lib/ai/interview-chat";
+import type { InterviewSourceSummary } from "@/lib/ai/interview-chat";
 
 export async function POST(req: Request) {
 
@@ -28,12 +30,23 @@ export async function POST(req: Request) {
         // resume-related questions) picks it up via this request-scoped
         // context — existing callers that never send resumeId are
         // unaffected, since askQuestion() runs exactly as before.
-        const response =
+        const withResumeContext = () =>
             typeof resumeId === "string" && resumeId
-                ? await resumeRequestContext.run({ resumeId }, askQuestion)
-                : await askQuestion();
+                ? resumeRequestContext.run({ resumeId }, askQuestion)
+                : askQuestion();
 
-        return NextResponse.json(response);
+        // interview-tool populates this store (if present) with rich
+        // {category, topic, question, difficulty} source attribution when
+        // it answers from the imported interview database — additive only,
+        // every existing caller/response shape is unaffected.
+        const interviewStore: { sources: InterviewSourceSummary[] } = { sources: [] };
+        const response = await interviewSourcesContext.run(interviewStore, withResumeContext);
+
+        return NextResponse.json(
+            interviewStore.sources.length > 0
+                ? { ...response, interviewSources: interviewStore.sources }
+                : response
+        );
 
     } catch (error) {
 

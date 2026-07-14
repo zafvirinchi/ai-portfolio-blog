@@ -2,6 +2,7 @@ import { projectTool } from "./project.tool";
 import { ragTool } from "./rag.tool";
 import { blogTool } from "./blog.tool";
 import { resumeTool } from "./resume.tool";
+import { interviewTool } from "./interview.tool";
 
 export const AI_TOOLS = [
 
@@ -12,5 +13,7 @@ export const AI_TOOLS = [
     ragTool,
 
     resumeTool,
+
+    interviewTool,
 
 ];

@@ -20,6 +20,9 @@ export const KNOWN_CATEGORIES = [
   "Cloud",
   "AI",
   "Machine Learning",
+  "Microservices",
+  "Behavioral",
+  "Coding",
 ] as const;
 
 // Explicit topic -> category overrides, per spec ("If topic is Spring
@@ -30,7 +33,6 @@ const TOPIC_OVERRIDES: Record<string, (typeof KNOWN_CATEGORIES)[number]> = {
   "spring security": "Spring Boot",
   "spring ioc": "Spring Boot",
   rest: "Spring Boot",
-  microservices: "Spring Boot",
   hashmap: "Java",
   collections: "Java",
   "exception handling": "Java",
@@ -73,6 +75,28 @@ const CATEGORY_KEYWORDS: Record<(typeof KNOWN_CATEGORIES)[number], string[]> = {
   Cloud: ["cloud", "saas", "paas", "iaas"],
   AI: ["artificial intelligence", " ai ", "llm", "openai"],
   "Machine Learning": ["machine learning", "ml model", "neural network", "training data"],
+  Microservices: ["microservice", "service discovery", "api gateway", "circuit breaker", "saga pattern", "service mesh"],
+  Behavioral: [
+    "tell me about a time",
+    "describe a situation",
+    "strength and weakness",
+    "conflict with",
+    "teamwork",
+    "leadership",
+    "challenge you faced",
+    "why do you want",
+    "greatest achievement",
+  ],
+  Coding: [
+    "write a function",
+    "write a program",
+    "algorithm",
+    "data structure",
+    "time complexity",
+    "space complexity",
+    "leetcode",
+    "coding question",
+  ],
 };
 
 function normalize(value: string): string {

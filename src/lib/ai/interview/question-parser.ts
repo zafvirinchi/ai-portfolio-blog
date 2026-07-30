@@ -49,31 +49,33 @@ function matchExplicitQuestion(line: string): QuestionMatch | undefined {
 }
 
 // A line with no explicit marker can still be a plain interview question —
-// e.g. "Explain the difference between HashMap and TreeMap" with no "Q:"
+// e.g. "Explain the difference between HashMap and TreeMap?" with no "Q:"
 // in front. A recognized interrogative keyword (What/Why/Explain/etc.) is
 // treated as a confidently inferred question (Heading inferred's 0.85
 // anchor, reused here — both represent "no explicit marker, but a strong
 // structural signal"); a bare trailing "?" with no such keyword is the
 // Ambiguous case (0.50).
+//
+// Both branches require a trailing "?". PDF text extraction produces one
+// array entry per *visual* line (wherever the page wraps), not one per
+// sentence — a long answer paragraph inevitably contains wrapped
+// continuation lines that happen to start with "how"/"what"/"explain"/etc.
+// purely by coincidence of where the line broke. Without the "?"
+// requirement those wrapped fragments were indistinguishable from real
+// questions, so every one of them prematurely closed out (and truncated)
+// the answer actually being accumulated. A genuine question — explicit
+// marker or not — reliably ends in "?"; a mid-paragraph wrap essentially
+// never does, since the wrap point is arbitrary relative to punctuation.
 function matchPlainQuestion(line: string): QuestionMatch | undefined {
   const trimmed = line.trim();
 
-  if (!trimmed) {
+  if (!trimmed || !trimmed.endsWith("?")) {
     return undefined;
   }
 
   const startsWithKeyword = INTERROGATIVE_PATTERN.test(trimmed);
-  const endsWithQuestionMark = trimmed.endsWith("?");
 
-  if (startsWithKeyword) {
-    return { text: trimmed, confidence: 0.85 };
-  }
-
-  if (endsWithQuestionMark) {
-    return { text: trimmed, confidence: 0.5 };
-  }
-
-  return undefined;
+  return { text: trimmed, confidence: startsWithKeyword ? 0.85 : 0.5 };
 }
 
 /**

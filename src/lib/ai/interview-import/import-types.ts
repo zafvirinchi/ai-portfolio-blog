@@ -24,6 +24,10 @@ export interface ImportableQuestion {
   tags?: string[];
   importantConcepts?: string[];
   commonMistakes?: string[];
+  /** Phase 11.5 — whether the answer is the document's own text or AI-generated. Persisted only if the answer_source column exists (see supabase/migrations). */
+  answerSource?: "ORIGINAL" | "GENERATED";
+  /** Phase 11.5 — extraction quality score (0-100) for the import batch this question came from. Persisted only if the quality_score column exists. */
+  qualityScore?: number;
 }
 
 export interface ImportableDocument {

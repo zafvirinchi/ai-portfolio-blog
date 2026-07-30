@@ -48,8 +48,25 @@ function findTopicForLine(topics: DetectedTopic[], lineIndex: number): DetectedT
   return current;
 }
 
+// Only explicit, known-vocabulary topic headings (Java, Spring, Docker,
+// etc. — topic-detector.ts's KNOWN_TOPIC_CONFIDENCE) are treated as hard
+// section boundaries that close out whatever question is currently
+// accumulating an answer. The generic heuristic ("short title-cased line")
+// is far weaker and, in practice, matches labels/sub-headings that appear
+// *inside* an answer's own body — "Answer", "Key Points", "Example",
+// "3. Use DevTools" — none of which are real document sections. Letting
+// those force-close an open question was truncating its answer exactly
+// like the interrogative-keyword bug did. A heuristic topic can still be
+// used to categorize a question (findTopicForLine looks at the full list
+// regardless of what's claimed here) — it just can't cut an answer short.
+const CLAIMED_TOPIC_CONFIDENCE_THRESHOLD = 0.98;
+
 function buildClaimedLineIndexes(lines: string[], topics: DetectedTopic[]): Set<number> {
-  const claimed = new Set<number>(topics.map((topic) => topic.lineIndex));
+  const claimed = new Set<number>(
+    topics
+      .filter((topic) => topic.confidence >= CLAIMED_TOPIC_CONFIDENCE_THRESHOLD)
+      .map((topic) => topic.lineIndex)
+  );
 
   lines.forEach((line, index) => {
     if (isIgnorableLine(line)) {

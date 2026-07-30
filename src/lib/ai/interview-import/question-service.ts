@@ -92,22 +92,61 @@ export async function listQuestionsByTopics(topicIds: string[]): Promise<Questio
   return data ?? [];
 }
 
+// True only for a missing-column error (PostgREST's "could not find the
+// column in the schema cache" / raw Postgres 42703) — anything else (bad
+// FK, RLS, network) should still surface as a real failure, not be
+// silently swallowed by the degradation path below.
+function isMissingColumnError(message: string | undefined): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  return normalized.includes("column") && (normalized.includes("does not exist") || normalized.includes("could not find"));
+}
+
+let warnedMissingReviewColumns = false;
+
 export async function createQuestion(topicId: string, question: ImportableQuestion): Promise<{ id: string }> {
-  const { data, error } = await supabaseAdmin
+  const basePayload = {
+    topic_id: topicId,
+    question: question.question,
+    answer: buildStoredAnswer(question),
+    level: resolveLevel(question),
+    tags: question.tags ?? [],
+    sort_order: question.order,
+    is_published: true,
+    code_example: question.codeExample || null,
+    code_language: resolveCodeLanguage(question.category),
+  };
+
+  // Phase 11.5's answer_source/quality_score columns only exist once
+  // supabase/migrations/20260719000000_add_interview_review_columns.sql
+  // has been run manually (this repo has no automated migration
+  // mechanism — see that file). Until then, degrade gracefully: try with
+  // the new fields, and if the DB rejects them specifically because the
+  // columns don't exist yet, retry without them rather than failing the
+  // whole import.
+  const reviewFields =
+    question.answerSource !== undefined || question.qualityScore !== undefined
+      ? { answer_source: question.answerSource ?? null, quality_score: question.qualityScore ?? null }
+      : {};
+
+  let { data, error } = await supabaseAdmin
     .from("interview_questions")
-    .insert({
-      topic_id: topicId,
-      question: question.question,
-      answer: buildStoredAnswer(question),
-      level: resolveLevel(question),
-      tags: question.tags ?? [],
-      sort_order: question.order,
-      is_published: true,
-      code_example: question.codeExample || null,
-      code_language: resolveCodeLanguage(question.category),
-    })
+    .insert({ ...basePayload, ...reviewFields })
     .select("id")
     .maybeSingle();
+
+  if (error && Object.keys(reviewFields).length > 0 && isMissingColumnError(error.message)) {
+    if (!warnedMissingReviewColumns) {
+      console.warn(
+        "[interview-import] answer_source/quality_score columns don't exist yet — run " +
+          "supabase/migrations/20260719000000_add_interview_review_columns.sql to enable persisting them. " +
+          "Continuing without them for this import."
+      );
+      warnedMissingReviewColumns = true;
+    }
+
+    ({ data, error } = await supabaseAdmin.from("interview_questions").insert(basePayload).select("id").maybeSingle());
+  }
 
   if (error || !data) {
     throw new Error(

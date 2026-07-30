@@ -13,16 +13,42 @@ export function normalizeForComparison(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-export function findCategoryMatch(categories: CategoryRow[], name: string): CategoryRow | undefined {
-  const target = normalizeForComparison(name);
+// Mirrors category-service.ts/topic-service.ts's slugify exactly — used
+// here only to predict what slug createCategory()/createTopic() would
+// generate for `name`, so a match can be found even when an existing row's
+// *title* text differs from `name` but would collide on the DB's unique
+// slug constraint (e.g. an existing category titled "General Interview
+// Questions" with slug "general" vs. a new lookup for "General" — same
+// slug, different title, title-only matching missed it and the insert
+// crashed the whole import instead of reusing the row).
+function slugify(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 
-  return categories.find((category) => normalizeForComparison(category.title) === target);
+  return slug || "item";
+}
+
+export function findCategoryMatch(categories: CategoryRow[], name: string): CategoryRow | undefined {
+  const targetTitle = normalizeForComparison(name);
+  const targetSlug = slugify(name);
+
+  return categories.find(
+    (category) => normalizeForComparison(category.title) === targetTitle || category.slug === targetSlug
+  );
 }
 
 export function findTopicMatch(topics: TopicRow[], categoryId: string, name: string): TopicRow | undefined {
-  const target = normalizeForComparison(name);
+  const targetTitle = normalizeForComparison(name);
+  const targetSlug = slugify(name);
 
-  return topics.find((topic) => topic.category_id === categoryId && normalizeForComparison(topic.title) === target);
+  return topics.find(
+    (topic) =>
+      topic.category_id === categoryId &&
+      (normalizeForComparison(topic.title) === targetTitle || topic.slug === targetSlug)
+  );
 }
 
 export function isDuplicateQuestion(existing: QuestionRow[], topicId: string, questionText: string): boolean {

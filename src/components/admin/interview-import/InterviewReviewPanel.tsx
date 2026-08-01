@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import type { InterviewExtractApiResult } from "./InterviewDocumentUpload";
 import InterviewFinalSummary from "./InterviewFinalSummary";
@@ -52,6 +54,37 @@ function toReviewItems(result: InterviewExtractApiResult): ReviewItem[] {
   }));
 }
 
+let blankItemCounter = 0;
+
+/** A fresh, empty entry for questions the extraction missed — opens straight into edit mode. */
+function createBlankItem(filename: string, items: ReviewItem[]): ReviewItem {
+  blankItemCounter += 1;
+
+  const maxOrder = items.reduce((max, item) => Math.max(max, item.order), 0);
+  // Default to the most recently added item's category/topic — most manual
+  // additions are a missed question under the same section as neighbors.
+  const lastItem = items[0];
+
+  return {
+    clientId: `blank-${blankItemCounter}`,
+    question: "",
+    category: lastItem?.category ?? "",
+    topic: lastItem?.topic ?? "",
+    answer: "",
+    answerSource: "ORIGINAL",
+    pristineAnswer: "",
+    pristineAnswerSource: "ORIGINAL",
+    confidence: 1,
+    order: maxOrder + 1,
+    documentName: filename,
+    diagramUrl: null,
+    approved: true,
+    isEditing: true,
+    aiCandidate: null,
+    regenerating: false,
+  };
+}
+
 async function regenerateAnswer(question: string, category: string, topic: string): Promise<string> {
   const response = await fetch("/api/admin/interview/regenerate-answer", {
     method: "POST",
@@ -80,6 +113,10 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
 
   function removeItem(clientId: string) {
     setItems((prev) => prev.filter((item) => item.clientId !== clientId));
+  }
+
+  function addBlankItem() {
+    setItems((prev) => [createBlankItem(result.filename, prev), ...prev]);
   }
 
   async function handleRegenerate(item: ReviewItem) {
@@ -190,13 +227,22 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
           </p>
         </div>
 
-        <button
-          onClick={handleConfirmImport}
-          disabled={importing || approvedCount === 0}
-          className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
-        >
-          {importing ? "Importing..." : `Import ${approvedCount} Approved Question${approvedCount === 1 ? "" : "s"}`}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={addBlankItem}
+            className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            + Add Question
+          </button>
+
+          <button
+            onClick={handleConfirmImport}
+            disabled={importing || approvedCount === 0}
+            className="rounded-xl bg-green-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {importing ? "Importing..." : `Import ${approvedCount} Approved Question${approvedCount === 1 ? "" : "s"}`}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -354,10 +400,14 @@ function ReviewCard({
         </div>
       ) : (
         <div className="mt-4">
-          <p className="font-semibold text-slate-900">{item.question}</p>
-          <pre className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-xl bg-slate-50 p-4 font-mono text-xs text-slate-700">
-            {item.answer || "(no answer)"}
-          </pre>
+          <p className="font-semibold text-slate-900">{item.question || "(no question yet)"}</p>
+          <div className="prose prose-sm mt-2 max-h-64 max-w-none overflow-y-auto rounded-xl bg-slate-50 p-4">
+            {item.answer ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.answer}</ReactMarkdown>
+            ) : (
+              <p className="text-slate-500">(no answer)</p>
+            )}
+          </div>
         </div>
       )}
 
@@ -389,15 +439,15 @@ function ReviewCard({
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <p className="mb-1 text-xs font-semibold text-slate-500">Original</p>
-              <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-3 font-mono text-xs text-slate-700">
-                {item.answer}
-              </pre>
+              <div className="prose prose-sm max-h-56 max-w-none overflow-y-auto rounded-lg bg-white p-3">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.answer}</ReactMarkdown>
+              </div>
             </div>
             <div>
               <p className="mb-1 text-xs font-semibold text-slate-500">AI Improved</p>
-              <pre className="max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-3 font-mono text-xs text-slate-700">
-                {item.aiCandidate}
-              </pre>
+              <div className="prose prose-sm max-h-56 max-w-none overflow-y-auto rounded-lg bg-white p-3">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.aiCandidate}</ReactMarkdown>
+              </div>
             </div>
           </div>
 

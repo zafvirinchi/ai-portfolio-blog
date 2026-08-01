@@ -7,6 +7,14 @@ type Props = {
   params: Promise<{ category: string }>;
 };
 
+function titleCaseFromSlug(slug: string): string {
+  return slug
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export default async function InterviewCategoryPage({ params }: Props) {
   const { category } = await params;
   const topics = await getTopicsByCategory(category);
@@ -19,7 +27,7 @@ export default async function InterviewCategoryPage({ params }: Props) {
     <section className="mx-auto max-w-7xl px-6 py-16 md:py-20">
       <PageHeader
         label="Interview Topics"
-        title={`${category.replace("-", " ")} Topics`}
+        title={`${titleCaseFromSlug(category)} Topics`}
         description="Choose a topic to view structured interview questions and answers."
       />
 

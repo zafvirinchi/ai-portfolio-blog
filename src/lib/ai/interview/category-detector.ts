@@ -50,6 +50,52 @@ const TOPIC_OVERRIDES: Record<string, (typeof KNOWN_CATEGORIES)[number]> = {
   "mongo aggregation": "MongoDB",
   "consumer groups": "Kafka",
   "aws lambda": "AWS",
+  // The broader Angular topic vocabulary added alongside KNOWN_TOPICS
+  // (topic-detector.ts) — several of these names are generic enough
+  // ("Components", "Testing", "Observables", ...) that the keyword-scoring
+  // fallback below can tie with unrelated categories (e.g. "generic"/
+  // "exception"/"stream" are also Java keywords) and lose the tie to
+  // whichever category happens to come first in KNOWN_CATEGORIES. An
+  // explicit override makes the (overwhelmingly common) case deterministic
+  // instead of leaving it to keyword luck.
+  components: "Angular",
+  modules: "Angular",
+  services: "Angular",
+  templates: "Angular",
+  "data binding": "Angular",
+  "event binding": "Angular",
+  "two-way binding": "Angular",
+  interpolation: "Angular",
+  "component communication": "Angular",
+  "input/output": "Angular",
+  viewchild: "Angular",
+  contentchild: "Angular",
+  "content projection": "Angular",
+  "angular cli": "Angular",
+  httpclient: "Angular",
+  interceptors: "Angular",
+  guards: "Angular",
+  resolvers: "Angular",
+  "lazy loading": "Angular",
+  "zone.js": "Angular",
+  "angular universal": "Angular",
+  "angular material": "Angular",
+  testing: "Angular",
+  "state management": "Angular",
+  observables: "Angular",
+  subjects: "Angular",
+  decorators: "Angular",
+  "custom directives": "Angular",
+  "custom pipes": "Angular",
+  validators: "Angular",
+  "angular security": "Angular",
+  "angular performance": "Angular",
+  "change detection strategy": "Angular",
+  ivy: "Angular",
+  "aot/jit": "Angular",
+  "angular animations": "Angular",
+  "angular i18n": "Angular",
+  accessibility: "Angular",
 };
 
 // Keyword fallback for topics not covered by an explicit override or the
@@ -58,7 +104,7 @@ const TOPIC_OVERRIDES: Record<string, (typeof KNOWN_CATEGORIES)[number]> = {
 const CATEGORY_KEYWORDS: Record<(typeof KNOWN_CATEGORIES)[number], string[]> = {
   Java: ["java", "jvm", "collection", "generic", "exception", "stream", "thread", "hashmap"],
   "Spring Boot": ["spring", "microservice", "rest api", "controller", "bean", "ioc", "dependency injection"],
-  Hibernate: ["hibernate", "orm", "session factory"],
+  Hibernate: ["hibernate", "session factory", "object-relational mapping"],
   JPA: ["jpa", "entitymanager", "persistence"],
   Angular: ["angular", "rxjs", "typescript", "directive", "signal"],
   React: ["react", "jsx", "hook", "redux"],
@@ -73,7 +119,7 @@ const CATEGORY_KEYWORDS: Record<(typeof KNOWN_CATEGORIES)[number], string[]> = {
   "System Design": ["system design", "scalability", "load balanc", "architecture"],
   DevOps: ["devops", "ci/cd", "pipeline", "jenkins"],
   Cloud: ["cloud", "saas", "paas", "iaas"],
-  AI: ["artificial intelligence", " ai ", "llm", "openai"],
+  AI: ["artificial intelligence", "ai", "llm", "openai"],
   "Machine Learning": ["machine learning", "ml model", "neural network", "training data"],
   Microservices: ["microservice", "service discovery", "api gateway", "circuit breaker", "saga pattern", "service mesh"],
   Behavioral: [
@@ -101,6 +147,31 @@ const CATEGORY_KEYWORDS: Record<(typeof KNOWN_CATEGORIES)[number], string[]> = {
 
 function normalize(value: string): string {
   return value.trim().toLowerCase();
+}
+
+// A plain `haystack.includes(keyword)` false-positives badly on short,
+// single-word keywords: "java" matches inside "javascript", the (now
+// removed) "orm" keyword matched inside "perform"/"platform"/"information".
+// Single-word keywords are matched on a word boundary instead; multi-word
+// phrases ("session factory", "rest api", ...) keep plain substring
+// matching since a phrase is specific enough not to collide.
+const keywordPatternCache = new Map<string, RegExp>();
+
+function containsKeyword(haystack: string, keyword: string): boolean {
+  const trimmed = keyword.trim();
+
+  if (trimmed.includes(" ")) {
+    return haystack.includes(trimmed);
+  }
+
+  let pattern = keywordPatternCache.get(trimmed);
+
+  if (!pattern) {
+    pattern = new RegExp(`\\b${trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`);
+    keywordPatternCache.set(trimmed, pattern);
+  }
+
+  return pattern.test(haystack);
 }
 
 export interface CategoryDetectionResult {
@@ -147,7 +218,7 @@ export function detectCategory(topic: string, supportingText: string): CategoryD
 
   for (const category of KNOWN_CATEGORIES) {
     const keywords = CATEGORY_KEYWORDS[category];
-    const score = keywords.reduce((count, keyword) => (haystack.includes(keyword) ? count + 1 : count), 0);
+    const score = keywords.reduce((count, keyword) => (containsKeyword(haystack, keyword) ? count + 1 : count), 0);
 
     if (score > bestScore) {
       bestScore = score;

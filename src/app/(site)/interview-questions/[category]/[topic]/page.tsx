@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import DynamicQAAccordion from "@/components/interview/DynamicQAAccordion";
 import Pagination from "@/components/interview/Pagination";
 import QuestionFilters from "@/components/interview/QuestionFilters";
 import PageHeader from "@/components/ui/PageHeader";
 import { getTopicInfo } from "@/lib/admin/interview-topic-service";
 import { getQuestionsByTopic } from "@/lib/admin/interview-question-service";
+import { stripEmojiForMetadata } from "@/lib/utils/metadata-text";
 
 type Props = {
   params: Promise<{
@@ -19,6 +21,29 @@ type Props = {
 };
 
 const PAGE_SIZE = 10;
+
+export async function generateMetadata({
+  params,
+}: Pick<Props, "params">): Promise<Metadata> {
+  const { category, topic } = await params;
+  const topicInfo = await getTopicInfo(category, topic);
+
+  if (!topicInfo) {
+    return {};
+  }
+
+  const description = stripEmojiForMetadata(
+    topicInfo.description ??
+      `Practice structured interview questions and answers on ${topicInfo.title}.`
+  );
+
+  return {
+    title: `${topicInfo.title} Interview Questions`,
+    description,
+    openGraph: { title: `${topicInfo.title} Interview Questions`, description },
+    twitter: { card: "summary", title: `${topicInfo.title} Interview Questions`, description },
+  };
+}
 
 export default async function InterviewTopicPage({
   params,

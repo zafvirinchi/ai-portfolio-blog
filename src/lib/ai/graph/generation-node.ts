@@ -2,11 +2,36 @@ import { GraphNode, GraphState } from "./state";
 import { portfolioChain } from "../chains/portfolio.chain";
 import { answerBuilder } from "../services/answer-builder";
 import { multiAgentCoordinator } from "../multi-agent";
+import { ExactInterviewAnswer } from "@/types/tool-result";
+
+// Renders a matched interview question's stored answer verbatim — no LLM
+// call — so the response is exactly what the source document said, image
+// and code sample included, instead of an LLM paraphrase of it.
+function renderExactAnswer(exact: ExactInterviewAnswer): string {
+  const parts = [exact.answer];
+
+  if (exact.diagramUrl) {
+    parts.push(`![${exact.diagramCaption || exact.question}](${exact.diagramUrl})`);
+  }
+
+  if (exact.codeExample) {
+    parts.push(`\`\`\`${exact.codeLanguage ?? ""}\n${exact.codeExample}\n\`\`\``);
+  }
+
+  return parts.join("\n\n");
+}
 
 export const generationNode: GraphNode = {
   name: "generation",
 
   async run(state: GraphState): Promise<GraphState> {
+
+    if (state.exactAnswer) {
+      return {
+        ...state,
+        finalAnswer: answerBuilder.build(renderExactAnswer(state.exactAnswer)),
+      };
+    }
 
     // Tool output -> Coordinator.run() -> merged context -> PortfolioChain.
     // The coordinator internally decides whether Research/Reviewer/

@@ -42,6 +42,8 @@ interface RawInterviewRow {
   tags: string[] | null;
   code_example: string | null;
   code_language: string | null;
+  diagram_url: string | null;
+  diagram_caption: string | null;
   interview_topics:
     | { title: string; interview_categories: { title: string } | { title: string }[] | null }
     | { title: string; interview_categories: { title: string } | { title: string }[] | null }[]
@@ -65,6 +67,8 @@ function toCandidate(row: RawInterviewRow): InterviewCandidate {
     tags: row.tags ?? [],
     codeExample: row.code_example,
     codeLanguage: row.code_language,
+    diagramUrl: row.diagram_url,
+    diagramCaption: row.diagram_caption,
     topicTitle: topic?.title ?? "General",
     categoryTitle: category?.title ?? "General",
   };
@@ -84,7 +88,7 @@ export async function searchInterviewQuestions(question: string): Promise<Interv
   let query = supabaseAdmin
     .from("interview_questions")
     .select(
-      "id, topic_id, question, answer, level, tags, code_example, code_language, interview_topics(title, interview_categories(title))"
+      "id, topic_id, question, answer, level, tags, code_example, code_language, diagram_url, diagram_caption, interview_topics(title, interview_categories(title))"
     )
     .eq("is_published", true)
     .limit(CANDIDATE_POOL_SIZE);

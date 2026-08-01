@@ -19,6 +19,7 @@ interface ReviewItem {
   confidence: number;
   order: number;
   documentName: string;
+  diagramUrl: string | null;
   approved: boolean;
   isEditing: boolean;
   aiCandidate: string | null;
@@ -43,6 +44,7 @@ function toReviewItems(result: InterviewExtractApiResult): ReviewItem[] {
     confidence: question.confidence,
     order: question.order,
     documentName: question.documentName,
+    diagramUrl: question.diagramUrl ?? null,
     approved: true,
     isEditing: false,
     aiCandidate: null,
@@ -140,6 +142,7 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
             confidence: item.confidence,
             order: item.order,
             documentName: item.documentName,
+            diagramUrl: item.diagramUrl,
           })),
           qualityScore: result.quality.qualityScore,
         }),
@@ -298,6 +301,15 @@ function ReviewCard({
           </button>
         </div>
       </div>
+
+      {item.diagramUrl && (
+        // eslint-disable-next-line @next/next/no-img-element -- admin-only thumbnail preview, arbitrary Supabase Storage URL
+        <img
+          src={item.diagramUrl}
+          alt={`Diagram for: ${item.question}`}
+          className="mt-4 max-h-48 rounded-xl border border-slate-200 object-contain"
+        />
+      )}
 
       {item.isEditing ? (
         <div className="mt-4 space-y-3">

@@ -44,6 +44,7 @@ export class InterviewTool implements AITool {
         result: {
           context: matched.context,
           chunks: [],
+          exactAnswer: matched.exactAnswer,
         },
       };
     }

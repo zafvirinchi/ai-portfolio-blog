@@ -9,6 +9,18 @@ const nextConfig: NextConfig = {
   // Marking the package external keeps it a plain Node require, so the
   // worker file resolves from node_modules like it does outside Next.js.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  images: {
+    // next/image refuses to load from any host not explicitly listed here —
+    // needed for extracted interview diagrams, which are public URLs served
+    // from the project's Supabase Storage bucket (interview-diagrams).
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+        pathname: "/storage/v1/object/public/**",
+      },
+    ],
+  },
 };
 
 const withMDX = createMDX({});

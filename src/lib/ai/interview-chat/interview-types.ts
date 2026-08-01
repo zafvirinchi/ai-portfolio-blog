@@ -1,3 +1,5 @@
+import { ExactInterviewAnswer } from "@/types/tool-result";
+
 /** A candidate row fetched from the existing interview_questions table, joined with its topic/category. */
 export interface InterviewCandidate {
   id: string;
@@ -8,6 +10,8 @@ export interface InterviewCandidate {
   tags: string[];
   codeExample: string | null;
   codeLanguage: string | null;
+  diagramUrl: string | null;
+  diagramCaption: string | null;
   topicTitle: string;
   categoryTitle: string;
 }
@@ -29,4 +33,6 @@ export interface InterviewSourceSummary {
 export interface InterviewSearchResult {
   context: string;
   sources: InterviewSourceSummary[];
+  /** Set only when the top-ranked candidate is a near-verbatim match for the user's question — see interview-exact-match.ts. */
+  exactAnswer?: ExactInterviewAnswer;
 }

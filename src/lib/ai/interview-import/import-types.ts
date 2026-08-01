@@ -28,6 +28,8 @@ export interface ImportableQuestion {
   answerSource?: "ORIGINAL" | "GENERATED";
   /** Phase 11.5 — extraction quality score (0-100) for the import batch this question came from. Persisted only if the quality_score column exists. */
   qualityScore?: number;
+  /** Public URL of a diagram extracted from the source PDF for this question, if any. */
+  diagramUrl?: string | null;
 }
 
 export interface ImportableDocument {

@@ -1,4 +1,5 @@
 import { ChatMessage } from "@/types/ai";
+import { ExactInterviewAnswer } from "@/types/tool-result";
 import { AgentIntent, AgentSource } from "../agent/agent-response";
 
 export interface GraphState {
@@ -11,6 +12,8 @@ export interface GraphState {
   mergedContext?: string;
   finalAnswer?: string;
   sources: AgentSource[];
+  /** Set when a retrieved interview question is a near-verbatim match — generationNode returns this answer verbatim instead of paraphrasing it. */
+  exactAnswer?: ExactInterviewAnswer;
 }
 
 export type NodeName = "planner" | "tool" | "promptBuilder" | "generation";

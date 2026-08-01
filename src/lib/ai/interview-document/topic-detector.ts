@@ -102,6 +102,45 @@ const KNOWN_TOPICS: { canonical: string; match: RegExp }[] = [
   { canonical: "Spring Boot", match: /^spring( boot)?$/i },
   { canonical: "Hibernate", match: /^hibernate$/i },
   { canonical: "JPA", match: /^jpa$/i },
+  // Angular — broader real-world section-heading vocabulary
+  { canonical: "Components", match: /^components?$/i },
+  { canonical: "Modules", match: /^(modules?|ngmodules?)$/i },
+  { canonical: "Services", match: /^services?$/i },
+  { canonical: "Templates", match: /^templates?$/i },
+  { canonical: "Data Binding", match: /^data binding$/i },
+  { canonical: "Event Binding", match: /^event binding$/i },
+  { canonical: "Two-Way Binding", match: /^two[- ]way binding$/i },
+  { canonical: "Interpolation", match: /^interpolation$/i },
+  { canonical: "Component Communication", match: /^component communication$/i },
+  { canonical: "Input/Output", match: /^(input\s*\/\s*output|@?input\s*(and|&)\s*@?output)$/i },
+  { canonical: "ViewChild", match: /^view ?child$/i },
+  { canonical: "ContentChild", match: /^content ?child$/i },
+  { canonical: "Content Projection", match: /^content projection$/i },
+  { canonical: "Angular CLI", match: /^angular cli$/i },
+  { canonical: "HttpClient", match: /^http ?client$/i },
+  { canonical: "Interceptors", match: /^interceptors?$/i },
+  { canonical: "Guards", match: /^(guards?|route guards?)$/i },
+  { canonical: "Resolvers", match: /^resolvers?$/i },
+  { canonical: "Lazy Loading", match: /^lazy loading$/i },
+  { canonical: "Zone.js", match: /^(zone\.?js|ngzone)$/i },
+  { canonical: "Angular Universal", match: /^angular universal$/i },
+  { canonical: "Angular Material", match: /^angular material$/i },
+  { canonical: "Testing", match: /^(testing|unit testing|jasmine|karma)$/i },
+  { canonical: "State Management", match: /^(state management|ngrx)$/i },
+  { canonical: "Observables", match: /^observables?$/i },
+  { canonical: "Subjects", match: /^(subjects?|behaviorsubjects?)$/i },
+  { canonical: "Decorators", match: /^decorators?$/i },
+  { canonical: "Custom Directives", match: /^custom directives?$/i },
+  { canonical: "Custom Pipes", match: /^custom pipes?$/i },
+  { canonical: "Validators", match: /^(validators?|form validation)$/i },
+  { canonical: "Angular Security", match: /^angular security$/i },
+  { canonical: "Angular Performance", match: /^(angular )?performance( optimization)?$/i },
+  { canonical: "Change Detection Strategy", match: /^(change detection strategy|onpush)$/i },
+  { canonical: "Ivy", match: /^ivy( renderer)?$/i },
+  { canonical: "AOT/JIT", match: /^(aot|jit|ahead[- ]of[- ]time|just[- ]in[- ]time)( compilation)?$/i },
+  { canonical: "Angular Animations", match: /^animations?$/i },
+  { canonical: "Angular i18n", match: /^(i18n|internationalization)$/i },
+  { canonical: "Accessibility", match: /^(accessibility|a11y)$/i },
   // Other stacks
   { canonical: "React", match: /^react(\.js)?$/i },
   { canonical: "React Hooks", match: /^react hooks?$/i },
@@ -135,9 +174,6 @@ const IGNORE_PATTERNS: RegExp[] = [
 ];
 
 const KNOWN_TOPIC_CONFIDENCE = 0.98;
-const HEURISTIC_TOPIC_CONFIDENCE = 0.85;
-const MAX_HEURISTIC_HEADING_LENGTH = 40;
-const MAX_HEURISTIC_HEADING_WORDS = 5;
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase().replace(/[.:]+$/, "");
@@ -171,34 +207,6 @@ function isIgnorable(text: string): boolean {
   return IGNORE_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-// A heading candidate for the (much more conservative) heuristic path:
-// short, no trailing "?", no explicit marker, not a deny-listed label, and
-// title-cased or fully capitalized.
-function looksLikeGenuineHeading(text: string): boolean {
-  const trimmed = text.trim();
-
-  if (!trimmed || trimmed.length > MAX_HEURISTIC_HEADING_LENGTH || trimmed.endsWith("?")) {
-    return false;
-  }
-
-  const normalized = normalizeLabel(trimmed);
-
-  if (NON_TOPIC_LABELS.has(normalized) || isIgnorable(trimmed)) {
-    return false;
-  }
-
-  const words = trimmed.replace(/[.:]+$/, "").split(/\s+/);
-
-  if (words.length > MAX_HEURISTIC_HEADING_WORDS) {
-    return false;
-  }
-
-  const isAllCaps = trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed);
-  const isTitleCase = words.every((word) => /^[A-Z0-9][\w.'-]*$/.test(word));
-
-  return isAllCaps || isTitleCase;
-}
-
 export interface DetectedTopic {
   topic: string;
   lineIndex: number;
@@ -206,13 +214,16 @@ export interface DetectedTopic {
 }
 
 /**
- * Scans layout lines for topic/section headings — known vocabulary first
- * (high confidence, and the only kind treated as a hard boundary
- * elsewhere), falling back to a narrow heuristic for documents whose
- * topics fall outside that list. The deny-list is checked before either
- * path: a line that's obviously an answer-structure label (Answer,
- * Benefits, Key Improvements, ...) is never returned as a topic, no matter
- * how heading-like it looks.
+ * Scans layout lines for topic/section headings — known vocabulary only
+ * (see KNOWN_TOPICS above). Earlier versions also accepted any short,
+ * title-cased/all-caps line as a topic via a generic heading heuristic —
+ * that guess is exactly what turned arbitrary PDF section labels ("Real-
+ * World Scenario", "Quick Recap", ...) into meaningless categories, so it
+ * was removed: a line that isn't a recognized topic simply isn't a
+ * boundary, and findTopicForLine() falls back to the nearest preceding
+ * known topic (or "General") instead of inventing one. The deny-list is
+ * still checked first: a line that's obviously an answer-structure label
+ * (Answer, Benefits, Key Improvements, ...) is never treated as a topic.
  */
 export function detectTopics(lines: LayoutLine[]): DetectedTopic[] {
   const topics: DetectedTopic[] = [];
@@ -232,15 +243,6 @@ export function detectTopics(lines: LayoutLine[]): DetectedTopic[] {
 
     if (known) {
       topics.push({ topic: known, lineIndex: line.lineIndex, confidence: KNOWN_TOPIC_CONFIDENCE });
-      continue;
-    }
-
-    if (looksLikeGenuineHeading(line.content)) {
-      topics.push({
-        topic: line.content.trim().replace(/[.:]+$/, ""),
-        lineIndex: line.lineIndex,
-        confidence: HEURISTIC_TOPIC_CONFIDENCE,
-      });
     }
   }
 

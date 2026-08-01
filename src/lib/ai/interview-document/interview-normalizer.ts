@@ -16,6 +16,8 @@ export interface DocumentQuestion {
   confidence: number;
   order: number;
   documentName: string;
+  /** Public URL of a diagram extracted from the PDF page(s) this question's answer spans, if any — set after normalizeQuestions() by index.ts's diagram-attacher. */
+  diagramUrl?: string | null;
 }
 
 const LOG_PREFIX = "[interview-document]";
@@ -126,6 +128,49 @@ export async function generateDocumentAnswer(
   return parsed.data;
 }
 
+const REFORMAT_MODEL = "gpt-4o-mini";
+
+function buildReformatMessages(question: string, rawAnswer: string) {
+  return [
+    {
+      role: "system" as const,
+      content:
+        "You clean up technical interview answers extracted from a PDF for readability. PDF text " +
+        "extraction often loses paragraph breaks and flattens tables/comparisons into one run-on block " +
+        "of text. Reformat the given answer into clean markdown: proper paragraph breaks, bullet lists " +
+        "for enumerations, and a markdown table when the content is a side-by-side comparison (e.g. " +
+        "'X vs Y', pros/cons). Preserve every fact, term, and code snippet exactly — do not add, remove, " +
+        "invent, or correct technical content, only restructure and fix broken sentences caused by " +
+        "extraction artifacts. If the text is already clean and well-structured, return it with only " +
+        "minor formatting polish. Return only the reformatted markdown, no preamble.",
+    },
+    {
+      role: "user" as const,
+      content: `Question: ${question}\n\nRaw extracted answer:\n${rawAnswer}`,
+    },
+  ];
+}
+
+/**
+ * Reformats a document's own (preserved, non-generated) answer for
+ * readability — same facts and wording, just restored paragraph breaks and
+ * table/list structure that pdf-parse's flat text extraction loses. Distinct
+ * from generateDocumentAnswer(), which writes a brand-new answer from
+ * scratch; this only touches presentation. Falls back to the raw answer
+ * unmodified if the reformat call fails — never blocks the import.
+ */
+export async function reformatPreservedAnswer(question: string, rawAnswer: string): Promise<string> {
+  const completion = await openai.chat.completions.create({
+    model: REFORMAT_MODEL,
+    temperature: 0.2,
+    messages: buildReformatMessages(question, rawAnswer),
+  });
+
+  const reformatted = completion.choices[0]?.message?.content?.trim();
+
+  return reformatted || rawAnswer;
+}
+
 function renderList(items: string[]): string {
   return items.map((item) => `- ${item}`).join("\n");
 }
@@ -204,11 +249,22 @@ export async function normalizeQuestions(
     if (detectedAnswer.hasOriginalAnswer) {
       preservedCount++;
 
+      let answer = detectedAnswer.answer;
+
+      try {
+        answer = await reformatPreservedAnswer(question.question, detectedAnswer.answer);
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} Answer reformat failed, keeping raw extracted text`, {
+          question: question.question.slice(0, 60),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
       return {
         question: question.question,
         category,
         topic,
-        answer: detectedAnswer.answer,
+        answer,
         answerSource: "ORIGINAL" as const,
         confidence: question.confidence,
         order: question.order,

@@ -2,6 +2,7 @@ export { interviewChatService, interviewSourcesContext, InterviewChatService } f
 export { searchInterviewQuestions, extractKeywords } from "./interview-search";
 export { rankInterviewResults, MAX_INTERVIEW_RESULTS } from "./interview-ranking";
 export { buildInterviewContext } from "./interview-context-builder";
+export { isExactQuestionMatch, toExactAnswer } from "./interview-exact-match";
 export type {
   InterviewCandidate,
   RankedInterviewCandidate,

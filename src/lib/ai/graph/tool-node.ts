@@ -29,6 +29,7 @@ export const toolNode: GraphNode = {
       retrievedContext: isRag ? payload.context : "",
       toolOutput: isRag ? undefined : payload,
       sources: isRag ? sourceBuilder.build(payload.chunks) : [],
+      exactAnswer: isRag ? payload.exactAnswer : undefined,
     };
 
   },

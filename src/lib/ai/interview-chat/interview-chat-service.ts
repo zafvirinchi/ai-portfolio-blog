@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { searchInterviewQuestions } from "./interview-search";
 import { rankInterviewResults } from "./interview-ranking";
 import { buildInterviewContext } from "./interview-context-builder";
+import { isExactQuestionMatch, toExactAnswer } from "./interview-exact-match";
 import { InterviewSearchResult, InterviewSourceSummary } from "./interview-types";
 
 const LOG_PREFIX = "[interview-chat]";
@@ -41,6 +42,11 @@ export class InterviewChatService {
 
     const result = buildInterviewContext(ranked);
     console.log(`${LOG_PREFIX} Context Built`, { sources: result.sources.length });
+
+    if (isExactQuestionMatch(question, ranked[0])) {
+      result.exactAnswer = toExactAnswer(ranked[0]);
+      console.log(`${LOG_PREFIX} Exact Match Found`, { question: ranked[0].question });
+    }
 
     interviewSourcesContext.getStore()?.sources.push(...result.sources);
 

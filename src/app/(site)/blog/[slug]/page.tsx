@@ -1,13 +1,46 @@
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { getBlogBySlug } from "@/lib/admin/blog-service";
+import { stripEmojiForMetadata } from "@/lib/utils/metadata-text";
 
 type Props = {
   params: Promise<{
     slug: string;
   }>;
 };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const blog = await getBlogBySlug(slug);
+
+  if (!blog) {
+    return {};
+  }
+
+  const description = blog.excerpt ? stripEmojiForMetadata(blog.excerpt) : undefined;
+
+  return {
+    title: blog.title,
+    description,
+    openGraph: {
+      type: "article",
+      title: blog.title,
+      description,
+      images: blog.cover_image ? [{ url: blog.cover_image }] : undefined,
+      publishedTime: blog.created_at,
+      modifiedTime: blog.updated_at,
+      tags: blog.tags ?? undefined,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: blog.title,
+      description,
+      images: blog.cover_image ? [blog.cover_image] : undefined,
+    },
+  };
+}
 
 export default async function BlogDetailPage({ params }: Props) {
   const { slug } = await params;

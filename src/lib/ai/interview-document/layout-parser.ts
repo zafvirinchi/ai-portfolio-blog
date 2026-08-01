@@ -1,6 +1,8 @@
 import { extractDocumentText } from "../interview/document-extractor";
 import { isIgnorableLine } from "../interview/topic-detector";
 import { InterviewUploadInput } from "../interview/interview-types";
+import { loadDocument } from "../ingestion/document-loader";
+import { extractPdfWithPages } from "./pdf-page-parser";
 
 // Q:/Question:/Interview Question:/Q1: are unambiguous — nobody writes
 // those to label an answer's own bullet list, so they're always a
@@ -36,6 +38,20 @@ export interface LayoutLine {
   isListItem: boolean;
   /** `text` with any matched marker prefix stripped; otherwise equal to `text`. */
   content: string;
+  /** 1-based PDF page this line came from. Always 1 for non-PDF formats (DOCX/TXT have no page concept here). */
+  pageNumber: number;
+}
+
+/** 1-based page number of the page containing `lineIndex`, given each page's starting line index (ascending, 0-based). Defaults to page 1 when `pageStartLines` is empty (non-PDF documents). */
+function resolvePageNumber(lineIndex: number, pageStartLines: number[]): number {
+  let page = 1;
+
+  for (let i = 0; i < pageStartLines.length; i++) {
+    if (pageStartLines[i] > lineIndex) break;
+    page = i + 1;
+  }
+
+  return page;
 }
 
 function matchMarker(
@@ -69,7 +85,7 @@ function matchMarker(
  * adjacent in the source, because a blank line separated them) to tell a
  * genuine paragraph break apart from a same-breath continuation.
  */
-export function parseLayout(rawText: string): LayoutLine[] {
+export function parseLayout(rawText: string, pageStartLines: number[] = []): LayoutLine[] {
   const rawLines = rawText.split("\n");
   const lines: LayoutLine[] = [];
 
@@ -89,14 +105,34 @@ export function parseLayout(rawText: string): LayoutLine[] {
       hasQuestionMarker: questionMarker !== undefined,
       isListItem: listMarker !== undefined,
       content: questionMarker?.content ?? listMarker?.content ?? trimmed,
+      pageNumber: resolvePageNumber(lineIndex, pageStartLines),
     });
   });
 
   return lines;
 }
 
-/** Loads and parses an uploaded interview document straight into a layout line stream. */
+/**
+ * Loads and parses an uploaded interview document straight into a layout
+ * line stream. PDFs go through the page-aware extractor (pdf-page-parser.ts)
+ * so every line is tagged with the PDF page it came from — needed to
+ * associate extracted diagrams (pdf-image-extractor.ts) with the question
+ * they illustrate. DOCX/TXT have no page concept here, so every line
+ * defaults to page 1.
+ */
 export async function parseDocumentLayout(input: InterviewUploadInput): Promise<LayoutLine[]> {
+  const loaded = loadDocument(input);
+
+  if (loaded.format === "pdf") {
+    const { text, pageStartLines } = await extractPdfWithPages(loaded.buffer);
+
+    if (!text) {
+      throw new Error(`No extractable text found in "${input.filename}".`);
+    }
+
+    return parseLayout(text, pageStartLines);
+  }
+
   const text = await extractDocumentText(input);
   return parseLayout(text);
 }

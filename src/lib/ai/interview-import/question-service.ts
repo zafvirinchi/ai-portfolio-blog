@@ -115,6 +115,7 @@ export async function createQuestion(topicId: string, question: ImportableQuesti
     is_published: true,
     code_example: question.codeExample || null,
     code_language: resolveCodeLanguage(question.category),
+    diagram_url: question.diagramUrl ?? null,
   };
 
   // Phase 11.5's answer_source/quality_score columns only exist once

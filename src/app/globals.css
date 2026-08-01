@@ -1,4 +1,12 @@
 @import "tailwindcss";
+/* Tailwind v4 no longer reads tailwind.config.ts's `plugins` array
+   automatically (that's a v3-era mechanism) — plugins must be loaded here
+   via @plugin. Without this, every `prose`/`prose-sm` class used across the
+   interview Q&A pages (DynamicQAAccordion, InterviewChatBox, admin review)
+   is a no-op: markdown tables render as bare, unstyled <table> elements
+   with no borders/padding (cells visually "touching"), and headings/lists/
+   paragraphs get no spacing at all. */
+@plugin "@tailwindcss/typography";
 
 body {
   background: #ffffff;
@@ -16,4 +24,23 @@ select {
   border-radius: 0.75rem;
   padding: 1rem;
   overflow-x: auto;
+}
+
+.prose table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid #e2e8f0;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.prose th {
+  background: #f8fafc;
 }

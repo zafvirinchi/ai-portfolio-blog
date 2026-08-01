@@ -12,6 +12,7 @@ const confirmQuestionSchema = z.object({
   confidence: z.number().min(0).max(1),
   order: z.number(),
   documentName: z.string().min(1),
+  diagramUrl: z.string().nullable().optional(),
 });
 
 const confirmRequestSchema = z.object({

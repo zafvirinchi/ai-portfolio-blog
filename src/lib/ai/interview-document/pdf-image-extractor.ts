@@ -1,5 +1,3 @@
-import { PDFParse } from "pdf-parse";
-
 export interface ExtractedPdfImage {
   pageNumber: number;
   buffer: Buffer;
@@ -20,6 +18,10 @@ const MIN_DIAGRAM_DIMENSION = 150;
  * question(s) on its page.
  */
 export async function extractPdfImages(buffer: Buffer): Promise<ExtractedPdfImage[]> {
+  // Dynamically imported — see document-parser.ts's parsePdf() for why
+  // pdf-parse must never be a top-level import in a module reachable from
+  // the general chat pipeline.
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
 
   try {

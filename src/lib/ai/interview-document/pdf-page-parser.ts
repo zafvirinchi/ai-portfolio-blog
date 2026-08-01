@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import { normalizeText } from "../ingestion/document-parser";
 
 export interface PdfPageExtraction {
@@ -17,6 +16,10 @@ export interface PdfPageExtraction {
  * layout-parser.ts to stamp a pageNumber on every LayoutLine.
  */
 export async function extractPdfWithPages(buffer: Buffer): Promise<PdfPageExtraction> {
+  // Dynamically imported — see document-parser.ts's parsePdf() for why
+  // pdf-parse must never be a top-level import in a module reachable from
+  // the general chat pipeline.
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
 
   try {

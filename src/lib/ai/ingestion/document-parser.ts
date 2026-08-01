@@ -1,6 +1,5 @@
 import mammoth from "mammoth";
 import matter from "gray-matter";
-import { PDFParse } from "pdf-parse";
 
 import { LoadedDocument } from "./document-loader";
 
@@ -11,6 +10,16 @@ export interface ParsedDocument {
 }
 
 async function parsePdf(buffer: Buffer): Promise<string> {
+  // Dynamically imported (not top-level) so pdf-parse/pdfjs-dist — which
+  // needs browser-only APIs (DOMMatrix) not present in every Node runtime
+  // (e.g. Vercel serverless) — only loads when a PDF is actually being
+  // parsed. This module's other exports (normalizeText) are pulled in
+  // eagerly by resume-parser.ts, which is itself eagerly imported by every
+  // chat request via tools/registry.ts -> resume.tool.ts -> resume/index.ts
+  // -> resume-parser.ts — a top-level `import { PDFParse } from "pdf-parse"`
+  // here previously crashed every single chat message on Vercel, not just
+  // PDF uploads.
+  const { PDFParse } = await import("pdf-parse");
   const parser = new PDFParse({ data: buffer });
 
   try {

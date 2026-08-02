@@ -9,16 +9,24 @@ const nextConfig: NextConfig = {
   // Marking the package external keeps it a plain Node require, so the
   // worker file resolves from node_modules like it does outside Next.js.
   serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
-  // pdfjs-dist loads its @napi-rs/canvas polyfill (needed for DOMMatrix,
-  // used both for text extraction and getImage()) via
-  // `process.getBuiltinModule("module").createRequire(...)` — too dynamic
-  // for Next.js's build-time file tracer (@vercel/nft) to detect, so its
-  // platform-specific native binary silently gets left out of the deployed
-  // serverless function on Vercel, and require("@napi-rs/canvas") fails at
-  // runtime. Force-including it here is the same fix Next.js's own docs
-  // recommend for other native/runtime deps like `sharp`.
+  // pdfjs-dist resolves several of its own files at runtime via dynamic/
+  // computed paths rather than static imports — its @napi-rs/canvas
+  // polyfill (needed for DOMMatrix) via
+  // `process.getBuiltinModule("module").createRequire(...)`, and its
+  // pdf.worker.mjs (both its own copy and pdf-parse's bundled copies) via a
+  // runtime-constructed URL. Both are too indirect for Next.js's build-time
+  // file tracer (@vercel/nft) to detect, so they silently get left out of
+  // the deployed serverless function on Vercel even though `pdf-parse`/
+  // `pdfjs-dist` themselves are present — each missing file surfaces as its
+  // own separate runtime error ("DOMMatrix is not defined", then "Cannot
+  // find module .../pdf.worker.mjs", ...) since the tracer's gap is the
+  // same for all of them. Force-including the two full package trees plus
+  // the native binary is the same fix Next.js's own docs recommend for
+  // other native/runtime deps like `sharp`.
   outputFileTracingIncludes: {
     "/*": [
+      "node_modules/pdfjs-dist/**/*",
+      "node_modules/pdf-parse/**/*",
       "node_modules/@napi-rs/canvas/**/*",
       "node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
       "node_modules/@napi-rs/canvas-linux-arm64-gnu/**/*",

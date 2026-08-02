@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type Params = {
@@ -40,6 +41,8 @@ export async function PUT(req: Request, { params }: Params) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
+    revalidatePath("/interview-questions");
+
     return NextResponse.json(data);
   } catch (error) {
     return NextResponse.json(
@@ -60,6 +63,8 @@ export async function DELETE(req: Request, { params }: Params) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+
+  revalidatePath("/interview-questions");
 
   return NextResponse.json({ message: "Category deleted successfully" });
 }

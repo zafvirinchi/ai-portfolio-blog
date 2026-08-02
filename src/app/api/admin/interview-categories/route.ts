@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function GET() {
@@ -43,6 +44,10 @@ export async function POST(req: Request) {
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+
+    // See confirm-import/route.ts — /interview-questions is statically
+    // prerendered and needs an explicit revalidate after any category write.
+    revalidatePath("/interview-questions");
 
     return NextResponse.json(data);
   } catch (error) {

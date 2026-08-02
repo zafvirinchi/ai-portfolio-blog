@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { interviewImportService } from "@/lib/ai/interview-import";
@@ -47,6 +48,14 @@ export async function POST(req: Request) {
       filename,
       questions: questions.map((question) => ({ ...question, qualityScore })),
     });
+
+    // /interview-questions (the top-level category listing) has no dynamic
+    // segments, so Next.js prerenders it statically at build time — a newly
+    // imported category otherwise wouldn't show up until the next deploy.
+    // The [category] and [category]/[topic] pages have no such issue
+    // (rendered dynamically per-request since there's no
+    // generateStaticParams).
+    revalidatePath("/interview-questions");
 
     return NextResponse.json({ import: importResult });
   } catch (error) {

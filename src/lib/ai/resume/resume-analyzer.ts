@@ -3,7 +3,8 @@ import { Resume, ResumeAnalysis, RESUME_ANALYSIS_JSON_SCHEMA, resumeAnalysisSche
 
 const ANALYSIS_MODEL = "gpt-4o-mini";
 
-function summarizeResumeForPrompt(resume: Resume): string {
+/** Flattens a structured Resume into readable prompt text — also reused by job-match/job-match-analyzer.ts. */
+export function summarizeResumeForPrompt(resume: Resume): string {
   const lines: string[] = [];
 
   lines.push(`Name: ${resume.contact.name ?? "Unknown"}`);

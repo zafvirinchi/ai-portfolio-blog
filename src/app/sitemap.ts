@@ -14,6 +14,7 @@ const STATIC_ROUTES = [
   "/interview-questions/chat",
   "/projects",
   "/resume-analyzer",
+  "/job-match",
   "/ai",
 ];
 

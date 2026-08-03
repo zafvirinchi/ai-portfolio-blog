@@ -249,22 +249,19 @@ export async function normalizeQuestions(
     if (detectedAnswer.hasOriginalAnswer) {
       preservedCount++;
 
-      let answer = detectedAnswer.answer;
-
-      try {
-        answer = await reformatPreservedAnswer(question.question, detectedAnswer.answer);
-      } catch (error) {
-        console.warn(`${LOG_PREFIX} Answer reformat failed, keeping raw extracted text`, {
-          question: question.question.slice(0, 60),
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-
+      // Reformatting every preserved answer here (one OpenAI call each,
+      // same as generation below) used to run unconditionally during
+      // extract — for a document where most answers are ORIGINAL (the
+      // common case), that's one LLM call per question before the admin
+      // has even seen the list, which pushed extract past Vercel's function
+      // timeout. Left as an on-demand action instead: the Review UI's
+      // "Format with AI" button (reformat-answer/route.ts, same
+      // reformatPreservedAnswer()) does this per-question only when asked.
       return {
         question: question.question,
         category,
         topic,
-        answer,
+        answer: detectedAnswer.answer,
         answerSource: "ORIGINAL" as const,
         confidence: question.confidence,
         order: question.order,

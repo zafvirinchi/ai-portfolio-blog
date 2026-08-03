@@ -26,6 +26,7 @@ interface ReviewItem {
   isEditing: boolean;
   aiCandidate: string | null;
   regenerating: boolean;
+  formatting: boolean;
 }
 
 type Props = {
@@ -51,6 +52,7 @@ function toReviewItems(result: InterviewExtractApiResult): ReviewItem[] {
     isEditing: false,
     aiCandidate: null,
     regenerating: false,
+    formatting: false,
   }));
 }
 
@@ -82,7 +84,30 @@ function createBlankItem(filename: string, items: ReviewItem[]): ReviewItem {
     isEditing: true,
     aiCandidate: null,
     regenerating: false,
+    formatting: false,
   };
+}
+
+// Light-touch cleanup (paragraphs/lists/tables) via the same
+// reformatPreservedAnswer() the manual add/edit form's "Format with AI"
+// button uses — distinct from regenerateAnswer() below, which writes a
+// brand-new answer from scratch. On-demand per question instead of running
+// automatically for every extracted answer, which used to push a
+// many-question document's extract past Vercel's function timeout.
+async function formatAnswer(question: string, answer: string): Promise<string> {
+  const response = await fetch("/api/admin/interview/reformat-answer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, answer }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error || "Answer formatting failed");
+  }
+
+  return data.answer as string;
 }
 
 async function regenerateAnswer(question: string, category: string, topic: string): Promise<string> {
@@ -117,6 +142,23 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
 
   function addBlankItem() {
     setItems((prev) => [createBlankItem(result.filename, prev), ...prev]);
+  }
+
+  async function handleFormat(item: ReviewItem) {
+    if (!item.answer.trim()) {
+      window.alert("Write an answer first.");
+      return;
+    }
+
+    updateItem(item.clientId, { formatting: true });
+
+    try {
+      const answer = await formatAnswer(item.question, item.answer);
+      updateItem(item.clientId, { answer, formatting: false });
+    } catch (err) {
+      updateItem(item.clientId, { formatting: false });
+      window.alert(err instanceof Error ? err.message : "Answer formatting failed");
+    }
   }
 
   async function handleRegenerate(item: ReviewItem) {
@@ -270,6 +312,7 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
             item={item}
             onUpdate={(patch) => updateItem(item.clientId, patch)}
             onRemove={() => removeItem(item.clientId)}
+            onFormat={() => handleFormat(item)}
             onRegenerate={() => handleRegenerate(item)}
             onKeepOriginal={() => keepOriginal(item)}
             onKeepAi={() => keepAi(item)}
@@ -286,6 +329,7 @@ function ReviewCard({
   item,
   onUpdate,
   onRemove,
+  onFormat,
   onRegenerate,
   onKeepOriginal,
   onKeepAi,
@@ -295,6 +339,7 @@ function ReviewCard({
   item: ReviewItem;
   onUpdate: (patch: Partial<ReviewItem>) => void;
   onRemove: () => void;
+  onFormat: () => void;
   onRegenerate: () => void;
   onKeepOriginal: () => void;
   onKeepAi: () => void;
@@ -412,6 +457,14 @@ function ReviewCard({
       )}
 
       <div className="mt-4 flex items-center gap-2">
+        <button
+          onClick={onFormat}
+          disabled={item.formatting}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          {item.formatting ? "Formatting..." : "Format with AI"}
+        </button>
+
         <button
           onClick={onRegenerate}
           disabled={item.regenerating}

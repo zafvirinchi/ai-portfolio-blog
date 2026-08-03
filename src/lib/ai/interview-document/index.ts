@@ -41,9 +41,21 @@ export class InterviewDocumentService {
     const topics = detectTopics(lines);
     console.log(`${LOG_PREFIX} Topics Extracted`, { filename: input.filename, count: topics.length });
 
-    const normalized = await normalizeQuestions(questions, answers, topics, input.filename);
+    // Independent of each other — diagram extraction only needs
+    // questions/lines (from layout parsing), not the normalized/reformatted
+    // answer text — so running them concurrently instead of one-after-the-
+    // other roughly halves this stage's wall-clock time. Both matter for
+    // staying under the serverless function's execution time limit.
+    const [normalized, diagramUrls] = await Promise.all([
+      normalizeQuestions(questions, answers, topics, input.filename),
+      this.extractDiagramsIfPdf(input, lines, questions),
+    ]);
 
-    await this.attachDiagramsIfPdf(input, lines, questions, normalized);
+    diagramUrls?.forEach((url, questionIndex) => {
+      if (normalized[questionIndex]) {
+        normalized[questionIndex].diagramUrl = url;
+      }
+    });
 
     const { valid, removed } = validateQuestions(normalized);
 
@@ -63,46 +75,46 @@ export class InterviewDocumentService {
   }
 
   /**
-   * For PDFs only: extracts embedded images and attaches each one to the
-   * question whose answer page range it falls in (see diagram-attacher.ts),
-   * mutating `normalized` in place. A failure here (unsupported PDF
-   * structure, storage error, etc.) never fails the whole import — it just
-   * leaves diagramUrl unset, same isolation principle as answer generation.
+   * For PDFs only: extracts embedded images and figures out which question
+   * each belongs to (see diagram-attacher.ts), returning questionIndex ->
+   * diagram URL. Runs independently of normalizeQuestions() (see process())
+   * — deliberately doesn't touch a DocumentQuestion[], so it has nothing to
+   * race with the concurrent normalization pass over the same array. A
+   * failure here (unsupported PDF structure, storage error, etc.) never
+   * fails the whole import — it just leaves diagramUrl unset, same
+   * isolation principle as answer generation.
    */
-  private async attachDiagramsIfPdf(
+  private async extractDiagramsIfPdf(
     input: InterviewUploadInput,
     lines: LayoutLine[],
-    questions: DetectedQuestion[],
-    normalized: DocumentQuestion[]
-  ): Promise<void> {
+    questions: DetectedQuestion[]
+  ): Promise<Map<number, string> | null> {
     const loaded = loadDocument(input);
 
     if (loaded.format !== "pdf") {
-      return;
+      return null;
     }
 
     try {
       const images = await extractPdfImages(loaded.buffer);
 
       if (images.length === 0) {
-        return;
+        return null;
       }
 
       const documentSlug = input.filename.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
       const diagramUrls = await attachDiagrams(lines, questions, images, documentSlug);
 
-      diagramUrls.forEach((url, questionIndex) => {
-        if (normalized[questionIndex]) {
-          normalized[questionIndex].diagramUrl = url;
-        }
-      });
-
       console.log(`${LOG_PREFIX} Diagrams Attached`, { filename: input.filename, count: diagramUrls.size });
+
+      return diagramUrls;
     } catch (error) {
       console.warn(`${LOG_PREFIX} Diagram extraction failed, continuing without diagrams`, {
         filename: input.filename,
         error: error instanceof Error ? error.message : String(error),
       });
+
+      return null;
     }
   }
 }

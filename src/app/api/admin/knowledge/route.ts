@@ -5,6 +5,11 @@ import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { knowledgeIngestionService } from "@/lib/ai/ingestion/pipeline";
 import { KnowledgeDocument } from "@/types/knowledge";
 
+// POST parses + chunks + embeds an uploaded document — can exceed Vercel's
+// default 15s timeout for larger files. Applies to the whole file (GET/
+// DELETE are unaffected but cheap enough not to need a separate config).
+export const maxDuration = 60;
+
 // PostgREST's `.or()` filter syntax is comma-delimited, so strip characters
 // that would let a search term break out of the filter or inject wildcards.
 function sanitizeSearchTerm(term: string): string {

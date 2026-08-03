@@ -74,16 +74,22 @@ export async function attachDiagrams(
     }
   });
 
-  for (const [questionIndex, imageIndex] of claims) {
-    const image = images[imageIndex];
-    const key = `${documentSlug}/q${questionIndex}-${randomUUID()}.png`;
+  // Uploads are independent (different Storage keys) — running them
+  // concurrently instead of one-at-a-time matters for the overall request's
+  // wall-clock time, since this whole pipeline runs inside a single
+  // serverless function invocation with a hard execution time limit.
+  await Promise.all(
+    Array.from(claims.entries()).map(async ([questionIndex, imageIndex]) => {
+      const image = images[imageIndex];
+      const key = `${documentSlug}/q${questionIndex}-${randomUUID()}.png`;
 
-    try {
-      diagramUrls.set(questionIndex, await uploadInterviewDiagram(image.buffer, key));
-    } catch (error) {
-      console.warn(`${LOG_PREFIX} Diagram upload failed`, { questionIndex, error });
-    }
-  }
+      try {
+        diagramUrls.set(questionIndex, await uploadInterviewDiagram(image.buffer, key));
+      } catch (error) {
+        console.warn(`${LOG_PREFIX} Diagram upload failed`, { questionIndex, error });
+      }
+    })
+  );
 
   return diagramUrls;
 }

@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { interviewDocumentService } from "@/lib/ai/interview-document";
 
+// Parses the PDF, reformats/generates answers via OpenAI (one call per
+// question), and extracts+uploads diagrams — comfortably exceeds Vercel's
+// default 15s function timeout for documents with more than a handful of
+// questions. 60s is Hobby's current max; bump if upgrading plans.
+export const maxDuration = 60;
+
 // Dry-run extraction only — no database writes. Runs the full Phase 11.5
 // pipeline (layout -> question/answer/topic detection -> preserve-or-
 // generate answers -> validation -> quality score) and returns the result

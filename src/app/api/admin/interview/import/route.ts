@@ -4,6 +4,11 @@ import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { InterviewExtractionService } from "@/lib/ai/interview";
 import { interviewImportService } from "@/lib/ai/interview-import";
 
+// Legacy one-shot upload+extract+generate+import route — same timeout risk
+// as extract/route.ts, compounded by also writing to the DB in the same
+// request. See that file for the full reasoning.
+export const maxDuration = 60;
+
 // Upload -> Extraction -> AI Generation -> Import -> Return Summary.
 // Reuses InterviewExtractionService (Milestone 1/2, unchanged) and
 // InterviewImportService (Milestone 3) — no logic duplicated here.

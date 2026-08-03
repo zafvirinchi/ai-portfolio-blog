@@ -4,6 +4,10 @@ import { z } from "zod";
 
 import { interviewImportService } from "@/lib/ai/interview-import";
 
+// Same reasoning as extract/route.ts — a large approved batch means many
+// sequential Supabase writes (category/topic lookups + question inserts).
+export const maxDuration = 60;
+
 const confirmQuestionSchema = z.object({
   question: z.string().min(1),
   category: z.string().min(1),

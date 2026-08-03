@@ -14,8 +14,12 @@ function buildReport(result: JobMatchResult): string {
   const lines: string[] = [
     `# Job Match Analysis — ${resume.contact.name ?? result.filename}`,
     "",
-    `Resume Match: ${jobMatch.jdMatchPercent}%`,
-    `ATS Score: ${atsScore.overall}/100`,
+    `JD Match: ${jobMatch.jdMatchPercent}%`,
+    `ATS Score: ${atsScore.overall}%`,
+    `Technical Match: ${jobMatch.subScores.technicalMatchPercent}%`,
+    `Experience Match: ${jobMatch.subScores.experienceMatchPercent}%`,
+    `Education Match: ${jobMatch.subScores.educationMatchPercent}%`,
+    `Soft Skills: ${jobMatch.subScores.softSkillsMatchPercent}%`,
     "",
     "## Critical Missing Skills",
     ...(jobMatch.missingSkills.map((item) => `- ${item}`) || []),
@@ -115,7 +119,11 @@ export default function JobMatchPageClient() {
               </div>
             </div>
 
-            <JobMatchScore jdMatchPercent={result.jobMatch.jdMatchPercent} atsScore={result.atsScore} />
+            <JobMatchScore
+              jdMatchPercent={result.jobMatch.jdMatchPercent}
+              subScores={result.jobMatch.subScores}
+              atsScore={result.atsScore}
+            />
 
             <JobMatchGapAnalysis jobMatch={result.jobMatch} />
 

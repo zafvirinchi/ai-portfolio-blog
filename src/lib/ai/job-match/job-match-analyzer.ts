@@ -14,8 +14,19 @@ against a specific job description. Base every claim only on the resume and
 job description text given to you — never invent a requirement the job
 description doesn't state, or a qualification the resume doesn't show.
 "jdMatchPercent" is your best-judgment estimate (0-100) of how well this
-resume matches this specific job description's requirements, not a generic
-resume-quality score. "missingSkills" and "missingKeywords" are things the
+resume matches this specific job description's requirements overall, not a
+generic resume-quality score. "subScores" breaks that same overall match
+down by dimension, each scored independently against what THIS job
+description asks for (not a generic quality score): "technicalMatchPercent"
+— how well the resume's technologies/tools cover the job description's
+technical requirements; "experienceMatchPercent" — how well the resume's
+years and type of experience meet the job description's experience
+requirements; "educationMatchPercent" — how well the resume's education
+meets any stated requirement (100 if the job description states no
+education requirement and the resume has none to contradict it);
+"softSkillsMatchPercent" — how well the resume evidences the soft
+skills/traits the job description asks for. "missingSkills" and
+"missingKeywords" are things the
 job description asks for that the resume doesn't show — keywords are the
 job description's own terminology (e.g. "microservices", "scalability"),
 skills are concrete technologies/tools. "experienceGaps" should only include

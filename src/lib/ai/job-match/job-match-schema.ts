@@ -15,8 +15,16 @@ export const resumeSectionFeedbackSchema = z.object({
   feedback: z.string(),
 });
 
+export const jobMatchSubScoresSchema = z.object({
+  technicalMatchPercent: z.number().min(0).max(100),
+  experienceMatchPercent: z.number().min(0).max(100),
+  educationMatchPercent: z.number().min(0).max(100),
+  softSkillsMatchPercent: z.number().min(0).max(100),
+});
+
 export const jobMatchAnalysisSchema = z.object({
   jdMatchPercent: z.number().min(0).max(100),
+  subScores: jobMatchSubScoresSchema,
   missingSkills: z.array(z.string()).default([]),
   missingKeywords: z.array(z.string()).default([]),
   experienceGaps: z.array(experienceGapSchema).default([]),
@@ -31,6 +39,7 @@ export const jobMatchAnalysisSchema = z.object({
 
 export type ExperienceGap = z.infer<typeof experienceGapSchema>;
 export type ResumeSectionFeedback = z.infer<typeof resumeSectionFeedbackSchema>;
+export type JobMatchSubScores = z.infer<typeof jobMatchSubScoresSchema>;
 export type JobMatchAnalysis = z.infer<typeof jobMatchAnalysisSchema>;
 
 // Hand-written mirror of jobMatchAnalysisSchema for OpenAI's strict
@@ -47,6 +56,22 @@ export const JOB_MATCH_ANALYSIS_JSON_SCHEMA: {
     type: "object",
     properties: {
       jdMatchPercent: { type: "number" },
+      subScores: {
+        type: "object",
+        properties: {
+          technicalMatchPercent: { type: "number" },
+          experienceMatchPercent: { type: "number" },
+          educationMatchPercent: { type: "number" },
+          softSkillsMatchPercent: { type: "number" },
+        },
+        required: [
+          "technicalMatchPercent",
+          "experienceMatchPercent",
+          "educationMatchPercent",
+          "softSkillsMatchPercent",
+        ],
+        additionalProperties: false,
+      },
       missingSkills: { type: "array", items: { type: "string" } },
       missingKeywords: { type: "array", items: { type: "string" } },
       experienceGaps: {
@@ -83,6 +108,7 @@ export const JOB_MATCH_ANALYSIS_JSON_SCHEMA: {
     },
     required: [
       "jdMatchPercent",
+      "subScores",
       "missingSkills",
       "missingKeywords",
       "experienceGaps",

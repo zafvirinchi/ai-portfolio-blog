@@ -10,6 +10,8 @@ type Message = {
 type ChatBoxProps = {
   /** When set, resume-aware questions are answered using this uploaded resume (see /resume-analyzer). */
   resumeId?: string;
+  /** When set alongside resumeId, resume-aware questions also use this JD match result (see /resume-analyzer). */
+  jdMatchId?: string;
   title?: string;
   subtitle?: string;
   placeholder?: string;
@@ -20,6 +22,7 @@ type ChatBoxProps = {
 
 export default function ChatBox({
   resumeId,
+  jdMatchId,
   title = "AI Assistant",
   subtitle = "Ask about Zafrul's profile, projects, blogs and interview prep",
   placeholder = "Ask about Java, Spring Boot, Angular, projects...",
@@ -57,6 +60,7 @@ export default function ChatBox({
           message: userMessage,
           history: messages,
           ...(resumeId ? { resumeId } : {}),
+          ...(jdMatchId ? { jdMatchId } : {}),
         }),
       });
 

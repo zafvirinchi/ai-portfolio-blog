@@ -1,4 +1,6 @@
 import { ragKnowledge } from "../knowledge/rag.service";
+import { jdMatchRequestContext, jdMatchService } from "../job-description/jd-service";
+import { JdMatchRecord } from "../job-description/jd-types";
 import { resumeRequestContext, resumeService } from "../resume";
 import { ResumeRecord } from "../resume/resume-types";
 import { ToolResponse, AITool } from "./types";
@@ -46,6 +48,48 @@ function buildResumeContext(record: ResumeRecord): string {
   return lines.join("\n");
 }
 
+// Phase 12 Milestone 4 — additive only: appended to the resume context
+// block when a JD match has been analyzed for this session (see
+// jdMatchRequestContext below). If no JD match is in context, this
+// function is never called and existing resume-only chat behavior is
+// unchanged.
+function buildJdMatchContext(record: JdMatchRecord): string {
+  const { jobDescription, matchResult } = record;
+
+  const lines: string[] = [
+    "",
+    `The user has also analyzed this resume against a job description${
+      jobDescription.jobTitle ? ` — ${jobDescription.jobTitle}` : ""
+    }${jobDescription.companyName ? ` at ${jobDescription.companyName}` : ""}. Use this match data too.`,
+    "",
+    `Overall JD match: ${matchResult.overallMatch}%`,
+    `JD-aware ATS score: ${matchResult.atsScore}/100 (keyword: ${matchResult.keywordScore}, experience: ${matchResult.experienceScore}, education: ${matchResult.educationScore}, formatting: ${matchResult.formattingScore}, achievement: ${matchResult.achievementScore}, project: ${matchResult.projectScore}, leadership: ${matchResult.leadershipScore}, certification: ${matchResult.certificationScore}, AI skills: ${matchResult.aiScore}, cloud: ${matchResult.cloudScore}, security: ${matchResult.securityScore}, soft skills: ${matchResult.softSkillsScore})`,
+    `Experience match: ${matchResult.experienceMatch.level} — ${matchResult.experienceMatch.reasoning}`,
+    "",
+    `Matched skills: ${matchResult.matchedSkills.join(", ") || "none"}`,
+    `Missing skills: ${matchResult.missingSkills.join(", ") || "none"}`,
+    `Missing keywords: ${matchResult.missingKeywords.join(", ") || "none"}`,
+    `Missing education/certifications: ${matchResult.educationMatch.missing.join(", ") || "none"}`,
+    "",
+    `Resume strengths for this JD: ${matchResult.resumeStrengths.join("; ") || "none identified"}`,
+    `Resume weaknesses for this JD: ${matchResult.resumeWeaknesses.join("; ") || "none identified"}`,
+    "",
+    `AI-optimized professional summary (already generated, only rephrases real resume content — offer this if asked to "rewrite my summary"): ${matchResult.optimizedSummary}`,
+    "Optimized experience bullets (already generated — offer these if asked to rewrite experience/projects):",
+    ...matchResult.optimizedExperience.map((bullet) => `  - Original: "${bullet.original}" -> Optimized: "${bullet.optimized}"`),
+    ...matchResult.optimizedProjects.map((bullet) => `  - Original: "${bullet.original}" -> Optimized: "${bullet.optimized}"`),
+    "",
+    `Top improvement suggestions: ${
+      matchResult.improvementSuggestions
+        .slice(0, 5)
+        .map((s) => `${s.title} (${s.priority} priority — ${s.why})`)
+        .join("; ") || "none"
+    }`,
+  ];
+
+  return lines.join("\n");
+}
+
 export class ResumeTool implements AITool {
   name = "resume-tool";
 
@@ -70,11 +114,18 @@ export class ResumeTool implements AITool {
     const record = activeResumeId ? resumeService.get(activeResumeId) : undefined;
 
     if (record) {
+      const activeJdMatchId = jdMatchRequestContext.getStore()?.jdMatchId;
+      const jdMatchRecord = activeJdMatchId ? jdMatchService.get(activeJdMatchId) : undefined;
+
+      const context = jdMatchRecord
+        ? `${buildResumeContext(record)}\n${buildJdMatchContext(jdMatchRecord)}`
+        : buildResumeContext(record);
+
       return {
         success: true,
         tool: this.name,
         result: {
-          context: buildResumeContext(record),
+          context,
           chunks: [],
         },
       };

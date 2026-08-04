@@ -24,6 +24,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "ai": "^6.0.191",
     "chromadb": "^3.5.0",
+    "docx": "^9.7.1",
     "gray-matter": "^4.0.3",
     "langchain": "^1.5.2",
     "lucide-react": "^1.16.0",
@@ -32,6 +33,7 @@
     "next-mdx-remote": "^6.0.0",
     "openai": "^6.39.0",
     "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.19.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
@@ -44,6 +46,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/react-syntax-highlighter": "^15.5.13",

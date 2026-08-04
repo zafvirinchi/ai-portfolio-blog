@@ -8,7 +8,13 @@ const nextConfig: NextConfig = {
   // tries to bundle it, producing a missing-chunk error for pdf.worker.mjs.
   // Marking the package external keeps it a plain Node require, so the
   // worker file resolves from node_modules like it does outside Next.js.
-  serverExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  // pdfkit (JD Intelligence Engine's optimized-resume PDF export) has the
+  // same class of problem: it reads its built-in AFM font metrics
+  // (Helvetica.afm, ...) from a path relative to its own `__dirname` at
+  // runtime. Turbopack bundling rewrites that to a virtual path that
+  // doesn't exist, producing an ENOENT for the font file even though
+  // pdfkit itself installed fine — same fix as pdf-parse/pdfjs-dist below.
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "pdfkit"],
   // pdfjs-dist resolves several of its own files at runtime via dynamic/
   // computed paths rather than static imports — its @napi-rs/canvas
   // polyfill (needed for DOMMatrix) via
@@ -30,6 +36,7 @@ const nextConfig: NextConfig = {
       "node_modules/@napi-rs/canvas/**/*",
       "node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
       "node_modules/@napi-rs/canvas-linux-arm64-gnu/**/*",
+      "node_modules/pdfkit/**/*",
     ],
   },
   images: {

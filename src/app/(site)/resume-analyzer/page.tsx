@@ -8,7 +8,16 @@ import ResumeAtsScore from "@/components/resume/ResumeAtsScore";
 import ResumeSkillGap from "@/components/resume/ResumeSkillGap";
 import ResumeTechRadar from "@/components/resume/ResumeTechRadar";
 import ChatBox from "@/components/ai/ChatBox";
+import Tabs, { TabItem } from "@/components/ui/Tabs";
+import JdUpload from "@/components/resume/jd/JdUpload";
+import JdAtsBreakdown from "@/components/resume/jd/JdAtsBreakdown";
+import JdKeywordMatch from "@/components/resume/jd/JdKeywordMatch";
+import JdExperienceMatch from "@/components/resume/jd/JdExperienceMatch";
+import JdEducationMatch from "@/components/resume/jd/JdEducationMatch";
+import JdMissingSkills from "@/components/resume/jd/JdMissingSkills";
+import JdResumeOptimization from "@/components/resume/jd/JdResumeOptimization";
 import type { ResumeAnalysisResult } from "@/lib/ai/resume/resume-types";
+import type { JdMatchApiResult } from "@/components/resume/jd/types";
 
 function buildReport(result: ResumeAnalysisResult): string {
   const { resume, analysis, atsScore, skillGap } = result;
@@ -88,6 +97,64 @@ const SUGGESTED_QUESTIONS = [
 
 export default function ResumeAnalyzerPage() {
   const [result, setResult] = useState<ResumeAnalysisResult | null>(null);
+  const [jdMatch, setJdMatch] = useState<JdMatchApiResult | null>(null);
+
+  function resetAll() {
+    setResult(null);
+    setJdMatch(null);
+  }
+
+  // "Overview" and "Chat" are exactly what the page already rendered
+  // before this milestone — unchanged content, just moved under a tab so
+  // a user who never provides a JD sees identical behavior to before.
+  const tabs: TabItem[] = result
+    ? [
+        {
+          id: "overview",
+          label: "Overview",
+          content: (
+            <div className="space-y-6">
+              <ResumeOverview analysis={result.analysis} candidateName={result.resume.contact.name} />
+              <ResumeAtsScore score={result.atsScore} />
+              <ResumeTechRadar technologyStack={result.analysis.technologyStack} />
+              <ResumeSkillGap skillGap={result.skillGap} />
+            </div>
+          ),
+        },
+        ...(jdMatch
+          ? [
+              { id: "ats-match", label: "ATS Match", content: <JdAtsBreakdown result={jdMatch} /> },
+              { id: "keyword-match", label: "Keyword Match", content: <JdKeywordMatch result={jdMatch} /> },
+              { id: "experience", label: "Experience", content: <JdExperienceMatch result={jdMatch} /> },
+              { id: "education", label: "Education", content: <JdEducationMatch result={jdMatch} /> },
+              { id: "missing-skills", label: "Missing Skills", content: <JdMissingSkills result={jdMatch} /> },
+              {
+                id: "optimization",
+                label: "Resume Optimization",
+                content: <JdResumeOptimization result={jdMatch} jdMatchId={jdMatch.jdMatchId} />,
+              },
+            ]
+          : []),
+        {
+          id: "chat",
+          label: "Chat",
+          content: (
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xl md:p-6">
+              <ChatBox
+                resumeId={result.resumeId}
+                jdMatchId={jdMatch?.jdMatchId}
+                title="Ask about this resume"
+                subtitle="Get follow-up answers grounded in the uploaded resume"
+                placeholder="Ask about your ATS score, skill gaps, or suitable roles..."
+                suggestions={SUGGESTED_QUESTIONS}
+                emptyStateTitle="Ask a follow-up question"
+                emptyStateBody="For example, try one of the questions below."
+              />
+            </div>
+          ),
+        },
+      ]
+    : [];
 
   return (
     <section className="min-h-screen bg-slate-50 px-6 py-16">
@@ -103,7 +170,8 @@ export default function ResumeAnalyzerPage() {
 
           <p className="mx-auto mt-5 max-w-2xl text-lg text-slate-600">
             Upload a resume to get an ATS score, skill gap breakdown, and personalized
-            improvement suggestions — then ask follow-up questions in chat.
+            improvement suggestions — then match it against a job description and ask
+            follow-up questions in chat.
           </p>
         </div>
 
@@ -130,7 +198,7 @@ export default function ResumeAnalyzerPage() {
                 </button>
 
                 <button
-                  onClick={() => setResult(null)}
+                  onClick={resetAll}
                   className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   Analyze another resume
@@ -138,25 +206,25 @@ export default function ResumeAnalyzerPage() {
               </div>
             </div>
 
-            <ResumeOverview analysis={result.analysis} candidateName={result.resume.contact.name} />
+            {jdMatch ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 p-4">
+                <p className="text-sm font-semibold text-blue-800">
+                  Matched against: {jdMatch.jobDescription.jobTitle ?? "this job description"}
+                  {jdMatch.jobDescription.companyName ? ` at ${jdMatch.jobDescription.companyName}` : ""} —{" "}
+                  {jdMatch.overallMatch}% match
+                </p>
+                <button
+                  onClick={() => setJdMatch(null)}
+                  className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                >
+                  Analyze a different job description
+                </button>
+              </div>
+            ) : (
+              <JdUpload resumeId={result.resumeId} onAnalyzed={setJdMatch} />
+            )}
 
-            <ResumeAtsScore score={result.atsScore} />
-
-            <ResumeTechRadar technologyStack={result.analysis.technologyStack} />
-
-            <ResumeSkillGap skillGap={result.skillGap} />
-
-            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-xl md:p-6">
-              <ChatBox
-                resumeId={result.resumeId}
-                title="Ask about this resume"
-                subtitle="Get follow-up answers grounded in the uploaded resume"
-                placeholder="Ask about your ATS score, skill gaps, or suitable roles..."
-                suggestions={SUGGESTED_QUESTIONS}
-                emptyStateTitle="Ask a follow-up question"
-                emptyStateBody="For example, try one of the questions below."
-              />
-            </div>
+            <Tabs tabs={tabs} />
           </div>
         )}
       </div>

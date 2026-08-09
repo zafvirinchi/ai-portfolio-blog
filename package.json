@@ -9,7 +9,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@langchain/core": "^1.2.1",
@@ -25,6 +26,7 @@
     "ai": "^6.0.191",
     "chromadb": "^3.5.0",
     "docx": "^9.7.1",
+    "exceljs": "^4.4.0",
     "gray-matter": "^4.0.3",
     "langchain": "^1.5.2",
     "lucide-react": "^1.16.0",
@@ -41,6 +43,7 @@
     "reading-time": "^1.5.0",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "stripe": "^22.4.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -54,6 +57,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

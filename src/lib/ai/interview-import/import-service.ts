@@ -1,8 +1,8 @@
 import { listCategories, createCategory, deleteCategory } from "./category-service";
 import { listTopics, createTopic, deleteTopic } from "./topic-service";
-import { listQuestionsByTopics, createQuestion, deleteQuestion } from "./question-service";
+import { listQuestionsByTopics, createQuestions, deleteQuestion } from "./question-service";
 import { findCategoryMatch, findTopicMatch, isDuplicateQuestion } from "./duplicate-detector";
-import { CategoryRow, ImportableDocument, ImportDuplicate, ImportResult, TopicRow } from "./import-types";
+import { CategoryRow, ImportableDocument, ImportableQuestion, ImportDuplicate, ImportResult, TopicRow } from "./import-types";
 
 const LOG_PREFIX = "[interview-import]";
 
@@ -26,6 +26,17 @@ const LOG_PREFIX = "[interview-import]";
  * error is re-thrown. This is an application-level compensating
  * rollback, not a real ACID transaction — see PHASE11_MILESTONE3 docs
  * for the trade-off and the future alternative (a Postgres RPC function).
+ *
+ * Question inserts are batched into a single bulk INSERT (see
+ * question-service.ts's createQuestions()) rather than one round trip
+ * per question — category/topic resolution has to stay sequential
+ * (each dedup check depends on rows created earlier in the same run),
+ * but question rows don't depend on each other, and a large approved
+ * batch (confirm-import) doing 30-50+ sequential single-row inserts was
+ * enough to exceed Vercel's function timeout, which surfaces to the
+ * admin as a raw "not valid JSON" error (the platform's own timeout
+ * page instead of this route's JSON response) rather than anything
+ * about the actual cause.
  */
 export class InterviewImportService {
   async import(document: ImportableDocument): Promise<ImportResult> {
@@ -38,7 +49,7 @@ export class InterviewImportService {
 
     const createdCategoryIds: string[] = [];
     const createdTopicIds: string[] = [];
-    const createdQuestionIds: string[] = [];
+    let createdQuestionIds: string[] = [];
 
     try {
       const categories = await listCategories();
@@ -50,9 +61,9 @@ export class InterviewImportService {
       const touchedTopicIds = new Set<string>();
       const newTopicIds = new Set<string>();
 
-      let importedQuestions = 0;
       let skippedQuestions = 0;
       const duplicates: ImportDuplicate[] = [];
+      const toInsert: { topicId: string; question: ImportableQuestion }[] = [];
 
       for (const question of document.questions) {
         if (!question.question?.trim() || !question.category?.trim() || !question.topic?.trim()) {
@@ -92,7 +103,11 @@ export class InterviewImportService {
 
         touchedTopicIds.add(topicRow.id);
 
-        // Duplicate question detection (same topic, normalized text match).
+        // Duplicate question detection (same topic, normalized text match)
+        // — checked against both pre-existing DB rows and sibling
+        // questions already queued earlier in this same batch (pushed
+        // into existingQuestions below with a placeholder id, since they
+        // aren't inserted yet).
         if (isDuplicateQuestion(existingQuestions, topicRow.id, question.question)) {
           skippedQuestions++;
           duplicates.push({
@@ -105,12 +120,17 @@ export class InterviewImportService {
           continue;
         }
 
-        const created = await createQuestion(topicRow.id, question);
-        createdQuestionIds.push(created.id);
-        existingQuestions.push({ id: created.id, topic_id: topicRow.id, question: question.question });
-        importedQuestions++;
-        console.log(`${LOG_PREFIX} Questions Imported`, { question: question.question.slice(0, 60) });
+        existingQuestions.push({ id: "", topic_id: topicRow.id, question: question.question });
+        toInsert.push({ topicId: topicRow.id, question });
       }
+
+      const created = await createQuestions(toInsert);
+      createdQuestionIds = created.map((row) => row.id);
+      const importedQuestions = created.length;
+
+      toInsert.forEach((item) => {
+        console.log(`${LOG_PREFIX} Questions Imported`, { question: item.question.question.slice(0, 60) });
+      });
 
       const result: ImportResult = {
         createdCategories: newCategoryIds.size,

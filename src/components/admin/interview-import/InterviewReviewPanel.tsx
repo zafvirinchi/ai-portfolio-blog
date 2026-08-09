@@ -88,6 +88,28 @@ function createBlankItem(filename: string, items: ReviewItem[]): ReviewItem {
   };
 }
 
+// Any of this file's fetch calls can hit a platform-level failure
+// (serverless function timeout, gateway 502/504) instead of this app's
+// own route handler — the platform returns a plain-text/HTML error
+// page, not JSON, and a raw `response.json()` call throws a
+// `SyntaxError` whose message ("Unexpected token 'A', "An error o"...
+// is not valid JSON") is meaningless to an admin reading it in the UI.
+// Reading the body as text first and parsing it ourselves lets us
+// surface something actually actionable instead.
+async function parseJsonResponse<T>(response: Response): Promise<T> {
+  const text = await response.text();
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "The server returned an unexpected response."
+        : `Request failed (HTTP ${response.status}) with no usable error message — this usually means the operation took too long to finish. Try again with a smaller batch of questions.`
+    );
+  }
+}
+
 // Light-touch cleanup (paragraphs/lists/tables) via the same
 // reformatPreservedAnswer() the manual add/edit form's "Format with AI"
 // button uses — distinct from regenerateAnswer() below, which writes a
@@ -101,7 +123,7 @@ async function formatAnswer(question: string, answer: string): Promise<string> {
     body: JSON.stringify({ question, answer }),
   });
 
-  const data = await response.json();
+  const data = await parseJsonResponse<{ answer?: string; error?: string }>(response);
 
   if (!response.ok) {
     throw new Error(data.error || "Answer formatting failed");
@@ -117,7 +139,7 @@ async function regenerateAnswer(question: string, category: string, topic: strin
     body: JSON.stringify({ question, category, topic }),
   });
 
-  const data = await response.json();
+  const data = await parseJsonResponse<{ answer?: string; error?: string }>(response);
 
   if (!response.ok) {
     throw new Error(data.error || "Answer regeneration failed");
@@ -227,7 +249,7 @@ export default function InterviewReviewPanel({ result, onDone }: Props) {
         }),
       });
 
-      const data = await response.json();
+      const data = await parseJsonResponse<{ import?: ImportResult; error?: string }>(response);
 
       if (!response.ok) {
         throw new Error(data.error || "Interview import failed");

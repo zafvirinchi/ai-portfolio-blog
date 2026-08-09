@@ -18,6 +18,13 @@ const navItems = [
   // AI / RAG Management
   { href: "/admin/rag-documents", label: "RAG Documents" },
   { href: "/admin/knowledge", label: "Knowledge Base" },
+
+  // SaaS Platform
+  { href: "/admin/saas", label: "SaaS Platform" },
+
+  // Billing
+  { href: "/admin/billing", label: "Billing" },
+  { href: "/admin/usage", label: "AI Usage" },
 ];
 
 export default function AdminSidebar() {

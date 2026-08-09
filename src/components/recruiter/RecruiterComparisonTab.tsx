@@ -1,0 +1,140 @@
+"use client";
+
+import { useState } from "react";
+
+import type { CandidateSummary } from "@/lib/ai/recruiter/candidate-types";
+import type { ComparisonResult } from "@/lib/ai/recruiter/candidate-types";
+
+type Props = {
+  candidates: CandidateSummary[];
+};
+
+export default function RecruiterComparisonTab({ candidates }: Props) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ComparisonResult | null>(null);
+
+  function toggle(candidateId: string) {
+    setSelectedIds((prev) => {
+      if (prev.includes(candidateId)) return prev.filter((id) => id !== candidateId);
+      if (prev.length >= 5) return prev;
+      return [...prev, candidateId];
+    });
+  }
+
+  async function handleCompare() {
+    if (selectedIds.length < 2) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/ai/recruiter/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidateIds: selectedIds }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Comparison failed");
+
+      setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Comparison failed.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="mb-3 text-sm font-semibold text-slate-700">Select 2-5 candidates to compare</p>
+
+        {candidates.length === 0 ? (
+          <p className="text-sm text-slate-400">Import candidates first.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {candidates.map((candidate) => (
+              <label
+                key={candidate.candidateId}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+                  selectedIds.includes(candidate.candidateId) ? "border-blue-400 bg-blue-50" : "border-slate-200"
+                }`}
+              >
+                <input type="checkbox" checked={selectedIds.includes(candidate.candidateId)} onChange={() => toggle(candidate.candidateId)} />
+                <span className="font-medium text-slate-800">{candidate.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <button
+          onClick={handleCompare}
+          disabled={loading || selectedIds.length < 2}
+          className="mt-4 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {loading ? "Comparing..." : "Generate Comparison"}
+        </button>
+      </div>
+
+      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+
+      {result && (
+        <div className="space-y-4">
+          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <table className="w-full min-w-[600px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-400">
+                  <th className="py-2 pr-3">Metric</th>
+                  {result.candidates.map((candidate) => (
+                    <th key={candidate.candidateId} className="px-2 py-2">
+                      {candidate.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.table.map((row) => (
+                  <tr key={row.metric} className="border-b border-slate-100">
+                    <td className="py-2 pr-3 font-medium text-slate-800">{row.metric}</td>
+                    {result.candidates.map((candidate) => (
+                      <td key={candidate.candidateId} className="px-2 py-2 text-slate-600">
+                        {row.values[candidate.candidateId] ?? "N/A"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h4 className="mb-2 text-xs font-bold uppercase text-slate-500">Recommendation</h4>
+            <p className="text-sm text-slate-700">{result.recommendation}</p>
+            <p className="mt-2 text-xs text-slate-500">{result.rankingRationale}</p>
+          </div>
+
+          {result.perCandidateNotes.length > 0 && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {result.perCandidateNotes.map((note) => {
+                const candidate = result.candidates.find((c) => c.candidateId === note.candidateId);
+                return (
+                  <div key={note.candidateId} className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm">
+                    <p className="font-semibold text-slate-800">{candidate?.name ?? note.candidateId}</p>
+                    <ul className="mt-1 list-disc pl-5 text-xs text-slate-600">
+                      {note.keyDifferentiators.map((item, index) => (
+                        <li key={index}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

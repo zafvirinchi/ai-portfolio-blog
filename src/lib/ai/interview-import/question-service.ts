@@ -104,8 +104,8 @@ function isMissingColumnError(message: string | undefined): boolean {
 
 let warnedMissingReviewColumns = false;
 
-export async function createQuestion(topicId: string, question: ImportableQuestion): Promise<{ id: string }> {
-  const basePayload = {
+function buildBasePayload(topicId: string, question: ImportableQuestion) {
+  return {
     topic_id: topicId,
     question: question.question,
     answer: buildStoredAnswer(question),
@@ -117,7 +117,22 @@ export async function createQuestion(topicId: string, question: ImportableQuesti
     code_language: resolveCodeLanguage(question.category),
     diagram_url: question.diagramUrl ?? null,
   };
+}
 
+// Kept as a distinct function (rather than the base builder plus an
+// optional-fields flag) so each call site's array has one concrete
+// return type — a flag-driven union return type made Supabase's
+// insert() overload resolution reject the array outright when mapped
+// over multiple questions.
+function buildFullPayload(topicId: string, question: ImportableQuestion) {
+  return {
+    ...buildBasePayload(topicId, question),
+    answer_source: question.answerSource ?? null,
+    quality_score: question.qualityScore ?? null,
+  };
+}
+
+export async function createQuestion(topicId: string, question: ImportableQuestion): Promise<{ id: string }> {
   // Phase 11.5's answer_source/quality_score columns only exist once
   // supabase/migrations/20260719000000_add_interview_review_columns.sql
   // has been run manually (this repo has no automated migration
@@ -125,28 +140,19 @@ export async function createQuestion(topicId: string, question: ImportableQuesti
   // the new fields, and if the DB rejects them specifically because the
   // columns don't exist yet, retry without them rather than failing the
   // whole import.
-  const reviewFields =
-    question.answerSource !== undefined || question.qualityScore !== undefined
-      ? { answer_source: question.answerSource ?? null, quality_score: question.qualityScore ?? null }
-      : {};
-
   let { data, error } = await supabaseAdmin
     .from("interview_questions")
-    .insert({ ...basePayload, ...reviewFields })
+    .insert(buildFullPayload(topicId, question))
     .select("id")
     .maybeSingle();
 
-  if (error && Object.keys(reviewFields).length > 0 && isMissingColumnError(error.message)) {
-    if (!warnedMissingReviewColumns) {
-      console.warn(
-        "[interview-import] answer_source/quality_score columns don't exist yet — run " +
-          "supabase/migrations/20260719000000_add_interview_review_columns.sql to enable persisting them. " +
-          "Continuing without them for this import."
-      );
-      warnedMissingReviewColumns = true;
-    }
-
-    ({ data, error } = await supabaseAdmin.from("interview_questions").insert(basePayload).select("id").maybeSingle());
+  if (error && isMissingColumnError(error.message)) {
+    warnMissingReviewColumnsOnce();
+    ({ data, error } = await supabaseAdmin
+      .from("interview_questions")
+      .insert(buildBasePayload(topicId, question))
+      .select("id")
+      .maybeSingle());
   }
 
   if (error || !data) {
@@ -156,6 +162,48 @@ export async function createQuestion(topicId: string, question: ImportableQuesti
   }
 
   return data;
+}
+
+/**
+ * Bulk variant — one INSERT round trip for every approved question
+ * instead of one round trip per question. This is what actually keeps a
+ * large approved batch (confirm-import) under Vercel's function timeout:
+ * category/topic resolution still has to be sequential (each one's
+ * dedup check depends on rows created earlier in the same run), but
+ * question rows have no such dependency on each other, so there's no
+ * reason to pay a network round trip per row.
+ */
+export async function createQuestions(
+  items: { topicId: string; question: ImportableQuestion }[]
+): Promise<{ id: string }[]> {
+  if (items.length === 0) return [];
+
+  const payloads = items.map(({ topicId, question }) => buildFullPayload(topicId, question));
+
+  let { data, error } = await supabaseAdmin.from("interview_questions").insert(payloads).select("id");
+
+  if (error && isMissingColumnError(error.message)) {
+    warnMissingReviewColumnsOnce();
+    const fallbackPayloads = items.map(({ topicId, question }) => buildBasePayload(topicId, question));
+    ({ data, error } = await supabaseAdmin.from("interview_questions").insert(fallbackPayloads).select("id"));
+  }
+
+  if (error || !data || data.length !== items.length) {
+    throw new Error(`Failed to bulk-create ${items.length} interview questions: ${error?.message ?? "row count mismatch"}`);
+  }
+
+  return data;
+}
+
+function warnMissingReviewColumnsOnce(): void {
+  if (warnedMissingReviewColumns) return;
+
+  console.warn(
+    "[interview-import] answer_source/quality_score columns don't exist yet — run " +
+      "supabase/migrations/20260719000000_add_interview_review_columns.sql to enable persisting them. " +
+      "Continuing without them for this import."
+  );
+  warnedMissingReviewColumns = true;
 }
 
 export async function deleteQuestion(id: string): Promise<void> {

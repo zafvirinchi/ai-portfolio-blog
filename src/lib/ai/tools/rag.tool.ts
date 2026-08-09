@@ -1,4 +1,5 @@
 import { ragKnowledge } from "../knowledge/rag.service";
+import { usageFeatureOverrideContext } from "../usage/usage-context";
 import { AITool, ToolResponse } from "./types";
 import { RagToolResult } from "@/types/tool-result";
 
@@ -16,8 +17,12 @@ export class RagTool implements AITool {
 
 async execute(question: string): Promise < ToolResponse < RagToolResult >> {
 
+    // Phase 14 Milestone 4 — relabels this tool's embedding call as
+    // KNOWLEDGE_SEARCH (distinct from the outer AI_CHAT context the
+    // chat route wraps every tool call in) so usage-meter.ts attributes
+    // it correctly; a pure no-op when no usageRequestContext is set.
     const result =
-        await ragKnowledge.search(question);
+        await usageFeatureOverrideContext.run({ feature: "KNOWLEDGE_SEARCH" }, () => ragKnowledge.search(question));
 
     return {
 

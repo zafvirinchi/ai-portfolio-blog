@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import ResumeUpload from "@/components/resume/ResumeUpload";
@@ -15,7 +16,7 @@ import JdKeywordMatch from "@/components/resume/jd/JdKeywordMatch";
 import JdExperienceMatch from "@/components/resume/jd/JdExperienceMatch";
 import JdEducationMatch from "@/components/resume/jd/JdEducationMatch";
 import JdMissingSkills from "@/components/resume/jd/JdMissingSkills";
-import JdResumeOptimization from "@/components/resume/jd/JdResumeOptimization";
+import ResumeOptimizerPanel from "@/components/resume/jd/ResumeOptimizerPanel";
 import type { ResumeAnalysisResult } from "@/lib/ai/resume/resume-types";
 import type { JdMatchApiResult } from "@/components/resume/jd/types";
 
@@ -130,8 +131,8 @@ export default function ResumeAnalyzerPage() {
               { id: "missing-skills", label: "Missing Skills", content: <JdMissingSkills result={jdMatch} /> },
               {
                 id: "optimization",
-                label: "Resume Optimization",
-                content: <JdResumeOptimization result={jdMatch} jdMatchId={jdMatch.jdMatchId} />,
+                label: "Resume Optimizer",
+                content: <ResumeOptimizerPanel jdMatchId={jdMatch.jdMatchId} />,
               },
             ]
           : []),
@@ -197,6 +198,20 @@ export default function ResumeAnalyzerPage() {
                   Download Analysis
                 </button>
 
+                <Link
+                  href={`/resume-rewriter?resumeId=${result.resumeId}`}
+                  className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Rewrite my resume
+                </Link>
+
+                <Link
+                  href={`/linkedin-optimizer?resumeId=${result.resumeId}${jdMatch ? `&jdMatchId=${jdMatch.jdMatchId}` : ""}`}
+                  className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Optimize my LinkedIn
+                </Link>
+
                 <button
                   onClick={resetAll}
                   className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
@@ -213,12 +228,26 @@ export default function ResumeAnalyzerPage() {
                   {jdMatch.jobDescription.companyName ? ` at ${jdMatch.jobDescription.companyName}` : ""} —{" "}
                   {jdMatch.overallMatch}% match
                 </p>
-                <button
-                  onClick={() => setJdMatch(null)}
-                  className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
-                >
-                  Analyze a different job description
-                </button>
+                <div className="flex gap-2">
+                  <Link
+                    href={`/interview-preparation?resumeId=${result.resumeId}&jdMatchId=${jdMatch.jdMatchId}`}
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    Prepare for the interview
+                  </Link>
+                  <Link
+                    href={`/cover-letter?jdMatchId=${jdMatch.jdMatchId}`}
+                    className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    Write a cover letter
+                  </Link>
+                  <button
+                    onClick={() => setJdMatch(null)}
+                    className="rounded-xl border border-blue-300 bg-white px-4 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                  >
+                    Analyze a different job description
+                  </button>
+                </div>
               </div>
             ) : (
               <JdUpload resumeId={result.resumeId} onAnalyzed={setJdMatch} />

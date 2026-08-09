@@ -1,4 +1,5 @@
 import { openai } from "../openai";
+import { usageFeatureOverrideContext } from "../usage/usage-context";
 import { buildSummaryMessages } from "./agent-prompts";
 import {
   ResearchOutput,
@@ -24,15 +25,19 @@ export interface SummarizerInput {
  */
 export class SummarizerAgent {
   async run(input: SummarizerInput): Promise<SummaryOutput> {
-    const completion = await openai.chat.completions.create({
-      model: SUMMARIZER_MODEL,
-      temperature: 0,
-      messages: buildSummaryMessages(input),
-      response_format: {
-        type: "json_schema",
-        json_schema: SUMMARY_JSON_SCHEMA,
-      },
-    });
+    // Phase 14 Milestone 4 — relabels this agent's own openai call as
+    // MULTI_AGENT_SUMMARY (distinct from research/reviewer).
+    const completion = await usageFeatureOverrideContext.run({ feature: "MULTI_AGENT_SUMMARY" }, () =>
+      openai.chat.completions.create({
+        model: SUMMARIZER_MODEL,
+        temperature: 0,
+        messages: buildSummaryMessages(input),
+        response_format: {
+          type: "json_schema",
+          json_schema: SUMMARY_JSON_SCHEMA,
+        },
+      })
+    );
 
     const raw = completion.choices[0]?.message?.content;
 

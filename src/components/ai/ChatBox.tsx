@@ -12,6 +12,20 @@ type ChatBoxProps = {
   resumeId?: string;
   /** When set alongside resumeId, resume-aware questions also use this JD match result (see /resume-analyzer). */
   jdMatchId?: string;
+  /** When set, resume/interview-aware questions also use this generated interview-prep report (see /interview-preparation). */
+  prepId?: string;
+  /** When set, a mock interview session is active (see /mock-interview) — chat can drive it ("ask next question", "evaluate my answer", "end interview") or treat a plain message as the candidate's answer. */
+  sessionId?: string;
+  /** When set, a resume-rewrite session is active (see /resume-rewriter) — chat can drive style/section-targeted rewrite requests. */
+  rewriteId?: string;
+  /** When set, a cover-letter session is active (see /cover-letter) — chat can drive letter/email/LinkedIn generation requests. */
+  coverLetterId?: string;
+  /** When set, a LinkedIn optimizer session is active (see /linkedin-optimizer) — chat can drive headline/about/SEO/networking-message generation requests. */
+  linkedinId?: string;
+  /** When true, the Recruiter Workspace is active (see /recruiter) — chat can search/compare/rank/recommend candidates. No session ID exists for this one; the workspace itself is the singleton. */
+  recruiterMode?: boolean;
+  /** When true, the Recruitment Pipeline is active (see /recruitment) — chat can query jobs, pipeline stages, interviews, and hiring funnel data. No session ID exists for this one either. */
+  recruitmentMode?: boolean;
   title?: string;
   subtitle?: string;
   placeholder?: string;
@@ -23,6 +37,13 @@ type ChatBoxProps = {
 export default function ChatBox({
   resumeId,
   jdMatchId,
+  prepId,
+  sessionId,
+  rewriteId,
+  coverLetterId,
+  linkedinId,
+  recruiterMode,
+  recruitmentMode,
   title = "AI Assistant",
   subtitle = "Ask about Zafrul's profile, projects, blogs and interview prep",
   placeholder = "Ask about Java, Spring Boot, Angular, projects...",
@@ -61,6 +82,13 @@ export default function ChatBox({
           history: messages,
           ...(resumeId ? { resumeId } : {}),
           ...(jdMatchId ? { jdMatchId } : {}),
+          ...(prepId ? { prepId } : {}),
+          ...(sessionId ? { sessionId } : {}),
+          ...(rewriteId ? { rewriteId } : {}),
+          ...(coverLetterId ? { coverLetterId } : {}),
+          ...(linkedinId ? { linkedinId } : {}),
+          ...(recruiterMode ? { recruiterMode: true } : {}),
+          ...(recruitmentMode ? { recruitmentMode: true } : {}),
         }),
       });
 

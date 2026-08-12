@@ -1,5 +1,6 @@
 import { openai } from "../openai";
 import { JobDescription } from "../job-description/jd-schema";
+import { delimitedDataBlock } from "../prompt-security";
 import { Resume } from "../resume/resume-schema";
 import { ANSWER_EVALUATION_JSON_SCHEMA, AnswerEvaluationRaw, DIMENSIONS_BY_TYPE, SessionQuestion, answerEvaluationRawSchema } from "./session-schema";
 
@@ -10,8 +11,22 @@ const EVALUATION_MODEL = "gpt-4o-mini";
 // interview-prep. answer-evaluator.ts composes this into the final,
 // scored AnswerEvaluation.
 
-function buildEvaluationMessages(question: SessionQuestion, answerText: string, resume: Resume, jd: JobDescription) {
+// Phase 17 Milestone 1, §5 — the candidate's own live-typed answer is the
+// single most attacker-influenceable input anywhere in this package (a
+// resume/JD requires an upload; this is free text typed in real time),
+// yet was the one piece of content with NO untrusted-data boundary at
+// all before this milestone. Wrapped in the same delimitedDataBlock()
+// (../prompt-security.ts) 20+ other generative call sites across this
+// codebase already use — no second delimiter implementation, and no
+// change to the model/temperature/schema/scoring logic itself.
+export function buildEvaluationMessages(question: SessionQuestion, answerText: string, resume: Resume, jd: JobDescription) {
   const relevantDimensions = DIMENSIONS_BY_TYPE[question.type];
+  const answerBlock = delimitedDataBlock("CANDIDATE ANSWER DATA", answerText.trim() || "(no answer given)");
+  const resumeBlock = delimitedDataBlock(
+    "RESUME DATA",
+    `Years of experience: ${resume.yearsOfExperience ?? "unknown"}, skills: ${[...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"}.`
+  );
+  const jdBlock = delimitedDataBlock("JOB DESCRIPTION DATA", `${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}.`);
 
   return [
     {
@@ -70,12 +85,11 @@ boilerplate.`,
       role: "user" as const,
       content: `Question (${question.type}, ${question.difficulty}, topic: ${question.topic}): ${question.text}
 
-Candidate's answer: ${answerText.trim() || "(no answer given)"}
+${answerBlock}
 
-Candidate context — years of experience: ${resume.yearsOfExperience ?? "unknown"}, skills: ${
-        [...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"
-      }.
-Target role: ${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}.`,
+${resumeBlock}
+
+${jdBlock}`,
     },
   ];
 }

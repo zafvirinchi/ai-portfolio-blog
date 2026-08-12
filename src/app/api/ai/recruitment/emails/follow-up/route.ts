@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const job = jobService.get(pc.jobId);
     if (!job) return NextResponse.json({ error: "Job not found" }, { status: 404 });
 
-    const profile = candidateService.getProfile(pc.candidateId);
+    const profile = await candidateService.getProfileForSystemUse(pc.candidateId);
     if (!profile) return NextResponse.json({ error: "Candidate not found or their resume has expired" }, { status: 404 });
 
     const email = await generateFollowUpEmail(job, profile.resume);

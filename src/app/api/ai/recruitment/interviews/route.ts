@@ -28,7 +28,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "scheduledAt is required" }, { status: 400 });
     }
 
-    const interview = interviewScheduler.schedule({ pipelineCandidateId, type, scheduledAt, interviewer: interviewer ?? null });
+    const interview = await interviewScheduler.schedule({ pipelineCandidateId, type, scheduledAt, interviewer: interviewer ?? null });
 
     await activityService.record("Interview Scheduled", `Scheduled ${interview.type} interview`, {
       interviewId: interview.interviewId,

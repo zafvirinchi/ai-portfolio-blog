@@ -41,15 +41,17 @@ function synthesizeJdText(job: Job): string {
 export class PipelineService {
   private readonly pipelineCandidates = new Map<string, PipelineCandidate>();
 
-  // Same "expire on the upstream real record's own lifetime" discipline
-  // Milestone 8 introduced — no independent timer.
-  private purgeExpired(): void {
-    for (const [id, pc] of this.pipelineCandidates) {
-      if (!candidateService.get(pc.candidateId)) {
-        this.pipelineCandidates.delete(id);
-      }
-    }
-  }
+  // Phase 16 Milestone 3 — candidateService moved from an ephemeral,
+  // short-TTL in-memory store to a persistent, DB-backed one, so a
+  // pipeline candidate's underlying CandidateRecord no longer silently
+  // vanishes on its own short lifetime the way Milestone 8's original
+  // in-memory store did. A genuinely recruiter-deleted candidate is a
+  // referential-integrity edge case for this still-in-memory (and,
+  // per Milestone 2's audit, still unauthenticated/out-of-scope)
+  // Recruitment Pipeline package to handle in a future milestone —
+  // this purge is intentionally a no-op now rather than a change that
+  // would ripple every read method here into async.
+  private purgeExpired(): void {}
 
   async attachCandidate(jobId: string, candidateId: string): Promise<PipelineCandidate> {
     const job = jobService.get(jobId);
@@ -58,10 +60,10 @@ export class PipelineService {
       throw new Error("Job not found.");
     }
 
-    const candidateRecord = candidateService.get(candidateId);
+    const candidateRecord = await candidateService.getForSystemUse(candidateId);
 
-    if (!candidateRecord) {
-      throw new Error("Candidate not found, or their resume has expired.");
+    if (!candidateRecord || !candidateRecord.resumeId) {
+      throw new Error("Candidate not found, or their cached resume data has expired.");
     }
 
     const jdMatchRecord = await jdMatchService.analyze({
@@ -89,7 +91,7 @@ export class PipelineService {
 
     this.pipelineCandidates.set(pipelineCandidateId, pipelineCandidate);
 
-    const candidateName = candidateService.list().find((c) => c.candidateId === candidateId)?.name ?? "A candidate";
+    const candidateName = (await candidateService.listForSystemUse()).find((c) => c.candidateId === candidateId)?.name ?? "A candidate";
 
     // Reframed per plan design decision 4 — this package can't hook
     // into Milestone 8's protected import flow, so the closest honest
@@ -126,10 +128,10 @@ export class PipelineService {
     return [...this.pipelineCandidates.values()].find((pc) => pc.jobId === jobId && pc.candidateId === candidateId);
   }
 
-  changeStage(pipelineCandidateId: string, stage: CandidateStage, actingRole: ActingRole | null = null): PipelineCandidate {
+  async changeStage(pipelineCandidateId: string, stage: CandidateStage, actingRole: ActingRole | null = null): Promise<PipelineCandidate> {
     const pc = this.requirePipelineCandidate(pipelineCandidateId);
     const job = jobService.get(pc.jobId);
-    const candidateName = candidateService.list().find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
+    const candidateName = (await candidateService.listForSystemUse()).find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
 
     applyStageMove(pc, stage, actingRole);
 
@@ -169,9 +171,25 @@ export class PipelineService {
     return pc;
   }
 
-  /** Thin passthrough to Milestone 8's own already-public method — see plan design decision 1. */
+  /**
+   * Thin passthrough to Milestone 8's own already-public method — see
+   * plan design decision 1. Phase 16 Milestone 2 scoped
+   * generateInterviewReadiness() to a recruiterId; the Recruitment
+   * Pipeline has no recruiter-identity concept of its own (job.recruiter
+   * is a plain display string, not an authenticated actor), so this
+   * passthrough resolves the candidate's OWN recruiterId via
+   * getForSystemUse() rather than gaining a new, unrelated auth
+   * requirement — documented as a known gap in PHASE16_MILESTONE2's
+   * doc, not a silent scope change.
+   */
   async passthroughGenerateInterviewReadiness(candidateId: string) {
-    return candidateService.generateInterviewReadiness(candidateId);
+    const record = await candidateService.getForSystemUse(candidateId);
+
+    if (!record) {
+      throw new Error("Candidate not found, or their resume has expired.");
+    }
+
+    return candidateService.generateInterviewReadiness(candidateId, record.recruiterId);
   }
 
   async generateHiringRecommendation(pipelineCandidateId: string): Promise<PipelineCandidate> {
@@ -182,7 +200,8 @@ export class PipelineService {
       throw new Error("Job not found.");
     }
 
-    const profile = candidateService.getProfile(pc.candidateId);
+    const candidateRecord = await candidateService.getForSystemUse(pc.candidateId);
+    const profile = candidateRecord ? await candidateService.getProfile(pc.candidateId, candidateRecord.recruiterId) : undefined;
 
     if (!profile) {
       throw new Error("Candidate not found, or their resume has expired.");

@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 
+import CurrentPlanCard from "@/components/dashboard/usage/CurrentPlanCard";
+import CreditBalanceCard from "@/components/dashboard/usage/CreditBalanceCard";
+import { getUsageLimitWarning } from "@/lib/analytics/customer-usage-shared";
 import type { ResolvedSubscription, CreditBalance } from "@/lib/billing/billing-types";
 import type { UsageBalance } from "@/lib/ai/usage/usage-types";
 
@@ -89,99 +91,19 @@ export default function BillingOverviewPage() {
     <div className="space-y-6">
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase text-slate-400">Current Plan</p>
-            <p className="mt-1 text-2xl font-bold text-slate-900">{subscription.plan.name}</p>
-            <p className="mt-1 text-sm text-slate-500">
-              Status: {subscription.status}
-              {subscription.current_period_end && ` · Renews ${new Date(subscription.current_period_end).toLocaleDateString()}`}
-              {subscription.cancel_at && ` · Cancels ${new Date(subscription.cancel_at).toLocaleDateString()}`}
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Link href="/billing/plans" className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
-              {subscription.isImplicitFree ? "Upgrade Plan" : "Change Plan"}
-            </Link>
-            {!subscription.isImplicitFree && (
-              <button
-                onClick={openPortal}
-                disabled={busy === "portal"}
-                className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Manage Payment Method
-              </button>
-            )}
-          </div>
-        </div>
-
-        {!subscription.isImplicitFree && (
-          <div className="mt-4">
-            {subscription.cancel_at ? (
-              <button onClick={resumeSubscription} disabled={busy === "resume"} className="text-xs font-semibold text-blue-600 hover:underline">
-                Resume subscription
-              </button>
-            ) : (
-              <button onClick={cancelSubscription} disabled={busy === "cancel"} className="text-xs font-semibold text-red-600 hover:underline">
-                Cancel subscription
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <CurrentPlanCard subscription={subscription} busy={busy} onManagePayment={openPortal} onCancel={cancelSubscription} onResume={resumeSubscription} />
 
       {aiBalance && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold text-slate-700">Monthly AI Credits</h2>
-            <Link href="/billing/usage" className="text-xs font-semibold text-blue-600 hover:underline">
-              View Usage Dashboard
-            </Link>
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <div>
-              <p className="text-xs uppercase text-slate-400">Monthly Credits</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{aiBalance.monthlyLimit === null ? "Unlimited" : aiBalance.monthlyLimit}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase text-slate-400">Used</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{aiBalance.consumed + aiBalance.reserved}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase text-slate-400">Remaining</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{aiBalance.remaining === null ? "Unlimited" : aiBalance.remaining}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase text-slate-400">Resets</p>
-              <p className="mt-1 text-lg font-bold text-slate-900">{new Date(aiBalance.resetDate).toLocaleDateString()}</p>
-            </div>
-          </div>
-
-          {aiBalance.usagePercent !== null && (
-            <div className="mt-4">
-              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full rounded-full ${aiBalance.usagePercent >= 90 ? "bg-red-500" : aiBalance.usagePercent >= 70 ? "bg-amber-500" : "bg-blue-600"}`}
-                  style={{ width: `${aiBalance.usagePercent}%` }}
-                />
-              </div>
-              <p className="mt-1 text-xs text-slate-500">{aiBalance.usagePercent}% used</p>
-              {aiBalance.usagePercent >= 100 ? (
-                <p className="mt-2 text-sm font-semibold text-red-600">
-                  Your AI credits are exhausted.{" "}
-                  <Link href="/billing/plans" className="underline">
-                    Upgrade Plan
-                  </Link>
-                </p>
-              ) : aiBalance.usagePercent >= 80 && aiBalance.remaining !== null ? (
-                <p className="mt-2 text-sm font-semibold text-amber-600">You have {aiBalance.remaining} AI credits remaining.</p>
-              ) : null}
-            </div>
-          )}
-        </div>
+        <CreditBalanceCard
+          title="Monthly AI Credits"
+          monthlyLimit={aiBalance.monthlyLimit}
+          used={aiBalance.consumed + aiBalance.reserved}
+          remaining={aiBalance.remaining}
+          usagePercent={aiBalance.usagePercent}
+          resetLabel="Resets"
+          resetDate={aiBalance.resetDate}
+          warning={getUsageLimitWarning(aiBalance.usagePercent)}
+        />
       )}
 
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">

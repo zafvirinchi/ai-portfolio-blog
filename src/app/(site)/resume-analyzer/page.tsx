@@ -128,7 +128,7 @@ export default function ResumeAnalyzerPage() {
               { id: "keyword-match", label: "Keyword Match", content: <JdKeywordMatch result={jdMatch} /> },
               { id: "experience", label: "Experience", content: <JdExperienceMatch result={jdMatch} /> },
               { id: "education", label: "Education", content: <JdEducationMatch result={jdMatch} /> },
-              { id: "missing-skills", label: "Missing Skills", content: <JdMissingSkills result={jdMatch} /> },
+              { id: "missing-skills", label: "Missing Skills", content: <JdMissingSkills result={jdMatch} jobDescription={jdMatch.jobDescription} /> },
               {
                 id: "optimization",
                 label: "Resume Optimizer",
@@ -197,6 +197,13 @@ export default function ResumeAnalyzerPage() {
                 >
                   Download Analysis
                 </button>
+
+                <Link
+                  href={`/resume-analyzer/versions?resumeId=${result.resumeId}`}
+                  className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Save to My Versions
+                </Link>
 
                 <Link
                   href={`/resume-rewriter?resumeId=${result.resumeId}`}

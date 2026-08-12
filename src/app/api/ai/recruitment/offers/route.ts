@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "pipelineCandidateId is required" }, { status: 400 });
     }
 
-    const offer = offerService.create({
+    const offer = await offerService.create({
       pipelineCandidateId,
       salary: salary ?? null,
       startDate: startDate ?? null,

@@ -75,7 +75,12 @@ function scoreCertification(resume: Resume): number {
   return 100;
 }
 
-const WEIGHTS = {
+// Phase 15 Milestone 7 — exported (unchanged values, unchanged scoring
+// behavior) so the ATS Explainability layer can compute an honest
+// "maximum possible point gain from fully fixing this category"
+// figure (§18) without a second, hand-copied weight table that could
+// drift from the real one.
+export const WEIGHTS = {
   formatting: 0.15,
   keyword: 0.25,
   experience: 0.2,

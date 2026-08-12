@@ -1,23 +1,29 @@
 import type { JdMatchResult } from "@/lib/ai/job-description/jd-schema";
+import type { AtsCategoryScores } from "@/lib/ai/job-description/jd-types";
+import { classifyResumeHealth, explainJdAtsCategories, deriveIssuesFromCategories, JD_ATS_WEIGHTS } from "@/lib/ai/resume-versions/dynamic/ats-explainability";
+
+/** JdMatchResult flattens the 12-category breakdown as `*Score` fields; ats-explainability.ts's functions expect the AtsCategoryScores shape ats-engine.ts itself produces — this just re-groups the same numbers, never recomputes them. */
+function toAtsCategoryScores(result: JdMatchResult): AtsCategoryScores {
+  return {
+    overall: result.atsScore,
+    keyword: result.keywordScore,
+    experience: result.experienceScore,
+    education: result.educationScore,
+    formatting: result.formattingScore,
+    achievement: result.achievementScore,
+    project: result.projectScore,
+    leadership: result.leadershipScore,
+    certification: result.certificationScore,
+    aiSkills: result.aiScore,
+    cloud: result.cloudScore,
+    security: result.securityScore,
+    softSkills: result.softSkillsScore,
+  };
+}
 
 type Props = {
   result: JdMatchResult;
 };
-
-const CATEGORIES: { key: keyof JdMatchResult; label: string }[] = [
-  { key: "keywordScore", label: "Keyword" },
-  { key: "experienceScore", label: "Experience" },
-  { key: "educationScore", label: "Education" },
-  { key: "formattingScore", label: "Formatting" },
-  { key: "achievementScore", label: "Achievement" },
-  { key: "projectScore", label: "Project" },
-  { key: "leadershipScore", label: "Leadership" },
-  { key: "certificationScore", label: "Certifications" },
-  { key: "aiScore", label: "AI Skills" },
-  { key: "cloudScore", label: "Cloud" },
-  { key: "securityScore", label: "Security" },
-  { key: "softSkillsScore", label: "Soft Skills" },
-];
 
 function verdict(overall: number): { label: string; className: string } {
   if (overall >= 85) return { label: "Excellent", className: "text-green-700 bg-green-50" };
@@ -27,8 +33,26 @@ function verdict(overall: number): { label: string; className: string } {
   return { label: "Needs work", className: "text-red-700 bg-red-50" };
 }
 
+const HEALTH_CLASSNAME: Record<string, string> = {
+  Excellent: "text-green-700 bg-green-50",
+  Strong: "text-blue-700 bg-blue-50",
+  Good: "text-blue-700 bg-blue-50",
+  "Needs Improvement": "text-amber-700 bg-amber-50",
+  "High Risk": "text-red-700 bg-red-50",
+};
+
+const PRIORITY_CLASSNAME: Record<string, string> = {
+  Critical: "text-red-700 bg-red-50",
+  High: "text-orange-700 bg-orange-50",
+  Medium: "text-amber-700 bg-amber-50",
+  Low: "text-slate-500 bg-slate-100",
+};
+
 export default function JdAtsBreakdown({ result }: Props) {
   const badge = verdict(result.atsScore);
+  const health = classifyResumeHealth(result.atsScore);
+  const categories = explainJdAtsCategories(toAtsCategoryScores(result));
+  const issues = deriveIssuesFromCategories(categories, JD_ATS_WEIGHTS, 100);
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -41,26 +65,29 @@ export default function JdAtsBreakdown({ result }: Props) {
         <span className={`rounded-full px-4 py-2 text-sm font-semibold ${badge.className}`}>{badge.label}</span>
       </div>
 
-      <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+      <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={result.atsScore} aria-valuemin={0} aria-valuemax={100} aria-label="JD-aware ATS score">
         <div className="h-full rounded-full bg-blue-600 transition-all" style={{ width: `${result.atsScore}%` }} />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
-        {CATEGORIES.map(({ key, label }) => {
-          const value = result[key] as number;
+      <div className="mt-4">
+        <span className={`rounded-xl px-3 py-2 text-xs font-semibold ${HEALTH_CLASSNAME[health]}`}>
+          Resume Health: <span className="font-bold">{health}</span>
+        </span>
+      </div>
 
-          return (
-            <div key={key}>
-              <div className="flex items-center justify-between text-sm">
-                <span className="font-medium text-slate-600">{label}</span>
-                <span className="font-semibold text-slate-900">{value}</span>
-              </div>
-              <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-blue-500" style={{ width: `${value}%` }} />
-              </div>
+      <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+        {categories.map(({ key, label, value, explanation }) => (
+          <div key={key}>
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-slate-600">{label}</span>
+              <span className="font-semibold text-slate-900">{value}</span>
             </div>
-          );
-        })}
+            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+              <div className="h-full rounded-full bg-blue-500" style={{ width: `${value}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{explanation}</p>
+          </div>
+        ))}
       </div>
 
       {(result.resumeStrengths.length > 0 || result.resumeWeaknesses.length > 0) && (
@@ -86,6 +113,24 @@ export default function JdAtsBreakdown({ result }: Props) {
               </ul>
             </div>
           )}
+        </div>
+      )}
+
+      {issues.length > 0 && (
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-slate-700">What would help most (by category)</p>
+          <ul className="mt-2 space-y-2">
+            {issues.map((issue) => (
+              <li key={issue.key} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                <span className="text-slate-700">{issue.label}</span>
+                <span className="flex items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${PRIORITY_CLASSNAME[issue.priority]}`}>{issue.priority}</span>
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-600">{issue.fixType === "safe" ? "Safe Fix" : "Manual Confirmation"}</span>
+                  {issue.potentialImpact > 0 && <span className="text-xs font-semibold text-blue-600">+{issue.potentialImpact} pts</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

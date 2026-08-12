@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { JobDescription, JdMatchResult } from "../job-description/jd-schema";
 import { jdMatchService } from "../job-description/jd-service";
-import { resumeOptimizer } from "../job-description/resume-optimizer";
+import { ephemeralResumeOptimizer } from "../job-description/resume-optimizer";
 import { Resume } from "../resume/resume-schema";
 import { resumeService } from "../resume/resume-service";
 import { generateApplicationEmail } from "./email-generator";
@@ -173,7 +173,7 @@ export class CoverLetterService {
 
     const { resume } = resumeRecord;
     const { jobDescription, matchResult } = jdMatchRecord;
-    const optimizerResult = resumeOptimizer.get(input.jdMatchId) ?? null;
+    const optimizerResult = ephemeralResumeOptimizer.get(input.jdMatchId) ?? null;
 
     const companyName = input.companyName?.trim() || jobDescription.companyName;
     if (!companyName) {
@@ -244,7 +244,7 @@ export class CoverLetterService {
   async regenerateLetter(coverLetterId: string, style?: CoverLetterStyle, length?: CoverLetterLength): Promise<CoverLetterRecord> {
     const record = this.mustGet(coverLetterId);
     const { resume, jd, jdMatchResult } = this.resolveContext(record);
-    const optimizerResult = resumeOptimizer.get(record.jdMatchId) ?? null;
+    const optimizerResult = ephemeralResumeOptimizer.get(record.jdMatchId) ?? null;
 
     const effectiveStyle = style ?? record.style;
     const effectiveLength = length ?? record.length;

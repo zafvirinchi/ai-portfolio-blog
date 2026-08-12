@@ -37,6 +37,16 @@ export const jobDescriptionSchema = z.object({
 export type JdExperienceRequirement = z.infer<typeof jdExperienceRequirementSchema>;
 export type JobDescription = z.infer<typeof jobDescriptionSchema>;
 
+// ---------------------------------------------------------------------------
+// Optimization mode (Milestone 15, §22) — controls how much latitude
+// optimizer.ts's rewrite prompt takes, never how truthful it's allowed to
+// be (the truthfulness rules apply identically at every mode).
+// ---------------------------------------------------------------------------
+
+export const OPTIMIZATION_MODES = ["conservative", "balanced", "aggressive"] as const;
+export type OptimizationMode = (typeof OPTIMIZATION_MODES)[number];
+export const DEFAULT_OPTIMIZATION_MODE: OptimizationMode = "balanced";
+
 const JD_STRING_ARRAY = { type: "array", items: { type: "string" } } as const;
 
 export const JOB_DESCRIPTION_JSON_SCHEMA: {
@@ -226,6 +236,8 @@ export const jdMatchResultSchema = z.object({
   securityScore: z.number().min(0).max(100),
   softSkillsScore: z.number().min(0).max(100),
   matchedSkills: z.array(z.string()).default([]),
+  /** JD skills that are the same technology family as something on the resume without being a confident exact match (e.g. resume shows "Spring Boot", JD wants "Spring Framework") — worth surfacing distinctly from a flat miss, per Milestone 15's MATCHED/PARTIAL/MISSING categorization. */
+  partialSkills: z.array(z.object({ jdSkill: z.string(), resumeSkill: z.string(), reason: z.string() })).default([]),
   missingSkills: z.array(z.string()).default([]),
   additionalSkills: z.array(z.string()).default([]),
   resumeStrengths: z.array(z.string()).default([]),

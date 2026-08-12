@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { computeJdMatch } from "@/lib/ai/job-description/jd-matcher";
 import { jdMatchService } from "@/lib/ai/job-description/jd-service";
-import { resumeOptimizer } from "@/lib/ai/job-description/resume-optimizer";
+import { ephemeralResumeOptimizer } from "@/lib/ai/job-description/resume-optimizer";
 import { resumeService } from "@/lib/ai/resume/resume-service";
 
 // One OpenAI structured-output call — same budget as the other JD-match
@@ -24,7 +24,7 @@ export async function POST(_req: Request, { params }: Params) {
       return NextResponse.json({ error: "JD match result not found or expired" }, { status: 404 });
     }
 
-    const cached = resumeOptimizer.get(jdMatchId);
+    const cached = ephemeralResumeOptimizer.get(jdMatchId);
 
     if (cached) {
       return NextResponse.json(cached);
@@ -44,9 +44,9 @@ export async function POST(_req: Request, { params }: Params) {
     // needing to modify jd-service.ts just to retain the intermediate
     // JdMatchComputation object it doesn't otherwise keep.
     const computation = computeJdMatch(resumeRecord.resume, jdMatchRecord.jobDescription);
-    const result = await resumeOptimizer.optimize(resumeRecord.resume, jdMatchRecord.jobDescription, computation);
+    const result = await ephemeralResumeOptimizer.optimize(resumeRecord.resume, jdMatchRecord.jobDescription, computation);
 
-    resumeOptimizer.store(jdMatchId, result);
+    ephemeralResumeOptimizer.store(jdMatchId, result);
 
     return NextResponse.json(result);
   } catch (error) {

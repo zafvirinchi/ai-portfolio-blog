@@ -1,4 +1,4 @@
-import { AtsScore, Resume } from "../resume/resume-schema";
+import { Resume } from "../resume/resume-schema";
 import { JdMatchResult } from "../job-description/jd-schema";
 import { CandidateScoreBreakdown } from "./candidate-types";
 
@@ -37,14 +37,15 @@ function leadershipFallback(resume: Resume): number {
 
 export function computeScoreBreakdown(params: {
   resume: Resume;
-  resumeAtsScore: AtsScore;
+  /** Only .overall of resume-score.ts's AtsScore was ever read here — Phase 16 Milestone 3 persists just that integer instead of the full breakdown, so this takes it directly. */
+  resumeAtsScore: number | null;
   jdMatch: JdMatchResult | null;
   interviewReadiness: number | null;
 }): CandidateScoreBreakdown {
   const { resume, resumeAtsScore, jdMatch, interviewReadiness } = params;
   const corpus = resumeCorpus(resume);
 
-  const resumeScore = resumeAtsScore.overall;
+  const resumeScore = resumeAtsScore;
   const atsScore = jdMatch?.atsScore ?? null;
   const jdMatchScore = jdMatch?.overallMatch ?? null;
   const experienceScore = jdMatch?.experienceScore ?? null;

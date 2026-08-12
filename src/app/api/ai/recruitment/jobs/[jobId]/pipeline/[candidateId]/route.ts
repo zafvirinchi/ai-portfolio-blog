@@ -16,7 +16,7 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json({ error: "This candidate is not attached to this job's pipeline" }, { status: 404 });
   }
 
-  const profile = candidateService.getProfile(candidateId);
+  const profile = await candidateService.getProfileForSystemUse(candidateId);
 
   if (!profile) {
     return NextResponse.json({ error: "Candidate not found or their resume has expired" }, { status: 404 });

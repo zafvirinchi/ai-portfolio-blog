@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const interview = interviewScheduler.get(interviewId);
     if (!interview) return NextResponse.json({ error: "Interview not found" }, { status: 404 });
 
-    const profile = candidateService.getProfile(pc.candidateId);
+    const profile = await candidateService.getProfileForSystemUse(pc.candidateId);
     if (!profile) return NextResponse.json({ error: "Candidate not found or their resume has expired" }, { status: 404 });
 
     const email = await generateInterviewReminderEmail(job, profile.resume, interview);

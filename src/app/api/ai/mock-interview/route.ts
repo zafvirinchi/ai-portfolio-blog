@@ -4,6 +4,8 @@ import { INTERVIEW_TYPES, SESSION_MODES } from "@/lib/ai/mock-interview/session-
 import { sessionService } from "@/lib/ai/mock-interview/session-service";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { QuotaExceededError, recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -33,6 +35,16 @@ export async function POST(req: Request) {
 
     await checkCredits("mock_interview");
 
+    // Phase 18 Milestone 1 — representative integration (Step 16), same
+    // pattern as /api/ai/resume/route.ts: additive to the existing
+    // organization-scoped check above, a complete no-op for every
+    // anonymous request (this route's overwhelmingly common case —
+    // Mock Interview is fully ephemeral/unauthenticated by design, see
+    // Phase 13/17's own documentation), and only enforced for a real
+    // signed-in user against intentionally generous provisional limits.
+    const platformUserId = await getOptionalUserId();
+    if (platformUserId) await requireQuota(platformUserId, "MOCK_INTERVIEWS");
+
     const startedAt = Date.now();
     const result = await withUsageContext("MOCK_INTERVIEW", "LLM_CALL", () =>
       sessionService.start({
@@ -44,12 +56,14 @@ export async function POST(req: Request) {
       })
     );
     await consumeCredits("mock_interview", Date.now() - startedAt);
+    // Only after the session genuinely started — never on a rejected/failed request.
+    if (platformUserId) await recordUsage(platformUserId, "MOCK_INTERVIEWS");
 
     return NextResponse.json(result);
   } catch (error) {
     console.error("[mock-interview] API route failed", error);
 
-    if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
+    if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError || error instanceof QuotaExceededError) {
       return NextResponse.json({ error: error.message }, { status: 402 });
     }
 

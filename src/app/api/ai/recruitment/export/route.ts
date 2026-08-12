@@ -17,9 +17,9 @@ function csvEscape(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function buildPipelineRows(jobId: string) {
+async function buildPipelineRows(jobId: string) {
   const pipelineCandidates = pipelineService.list(jobId);
-  const allCandidates = candidateService.list();
+  const allCandidates = await candidateService.listForSystemUse();
 
   return pipelineCandidates.map((pc) => {
     const summary = allCandidates.find((candidate) => candidate.candidateId === pc.candidateId);
@@ -38,8 +38,8 @@ function buildPipelineRows(jobId: string) {
 
 const PIPELINE_COLUMNS = ["Name", "Stage", "ATS Score", "JD Match", "Resume Score", "Assigned Recruiter", "Hiring Manager"];
 
-function renderPipelineCsv(jobId: string): string {
-  const rows = buildPipelineRows(jobId);
+async function renderPipelineCsv(jobId: string): Promise<string> {
+  const rows = await buildPipelineRows(jobId);
   const header = PIPELINE_COLUMNS.map(csvEscape).join(",");
   const body = rows.map((row) => [row.name, row.stage, row.atsScore, row.jdMatch, row.resumeScore, row.assignedRecruiter, row.hiringManager].map(csvEscape).join(","));
 
@@ -51,7 +51,7 @@ async function renderPipelineExcel(jobId: string): Promise<Buffer> {
   const sheet = workbook.addWorksheet("Pipeline");
   sheet.columns = PIPELINE_COLUMNS.map((header) => ({ header, key: header, width: 22 }));
 
-  buildPipelineRows(jobId).forEach((row) => {
+  (await buildPipelineRows(jobId)).forEach((row) => {
     sheet.addRow({
       Name: row.name,
       Stage: row.stage,
@@ -67,7 +67,9 @@ async function renderPipelineExcel(jobId: string): Promise<Buffer> {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
-function renderPipelinePdf(jobId: string): Promise<Buffer> {
+async function renderPipelinePdf(jobId: string): Promise<Buffer> {
+  const rows = await buildPipelineRows(jobId);
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 40, size: "A4", layout: "landscape" });
     const chunks: Buffer[] = [];
@@ -80,7 +82,7 @@ function renderPipelinePdf(jobId: string): Promise<Buffer> {
     doc.fontSize(9).fillColor("gray").text(`Generated ${new Date().toLocaleString()}`);
     doc.fillColor("black").moveDown();
 
-    buildPipelineRows(jobId).forEach((row) => {
+    rows.forEach((row) => {
       doc.fontSize(11).text(`${row.name} — ${row.stage}`);
       doc.fontSize(8).text(`ATS ${row.atsScore || "N/A"} | JD Match ${row.jdMatch || "N/A"} | Resume Score ${row.resumeScore || "N/A"}`);
       doc.fontSize(8).text(`Recruiter: ${row.assignedRecruiter || "unassigned"} | Hiring Manager: ${row.hiringManager || "unassigned"}`);
@@ -189,7 +191,7 @@ export async function GET(req: Request) {
         });
       }
 
-      return new NextResponse(renderPipelineCsv(jobId), {
+      return new NextResponse(await renderPipelineCsv(jobId), {
         headers: { "Content-Type": "text/csv", "Content-Disposition": 'attachment; filename="pipeline-report.csv"' },
       });
     }

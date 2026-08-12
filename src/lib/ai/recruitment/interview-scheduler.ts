@@ -69,7 +69,7 @@ ${summarizeResumeForPrompt(resume)}${
 export class InterviewScheduler {
   private readonly interviews = new Map<string, InterviewSchedule>();
 
-  schedule(input: InterviewScheduleInput): InterviewSchedule {
+  async schedule(input: InterviewScheduleInput): Promise<InterviewSchedule> {
     const pc = pipelineService.get(input.pipelineCandidateId);
 
     if (!pc) {
@@ -98,7 +98,7 @@ export class InterviewScheduler {
     this.interviews.set(interviewId, interview);
 
     const job = jobService.get(pc.jobId);
-    const candidateName = candidateService.list().find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
+    const candidateName = (await candidateService.listForSystemUse()).find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
 
     notificationService.emit({
       type: "Interview Scheduled",
@@ -125,14 +125,14 @@ export class InterviewScheduler {
     return this.interviews.get(interviewId);
   }
 
-  updateStatus(interviewId: string, status: InterviewStatus): InterviewSchedule {
+  async updateStatus(interviewId: string, status: InterviewStatus): Promise<InterviewSchedule> {
     const interview = this.requireInterview(interviewId);
     interview.status = status;
     interview.updatedAt = new Date().toISOString();
 
     if (status === "Completed") {
       const pc = pipelineService.get(interview.pipelineCandidateId);
-      const candidateName = pc ? candidateService.list().find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate" : "A candidate";
+      const candidateName = pc ? (await candidateService.listForSystemUse()).find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate" : "A candidate";
 
       notificationService.emit({
         type: "Interview Completed",
@@ -176,7 +176,7 @@ export class InterviewScheduler {
       throw new Error("Job not found.");
     }
 
-    const profile = candidateService.getProfile(pc.candidateId);
+    const profile = await candidateService.getProfileForSystemUse(pc.candidateId);
 
     if (!profile) {
       throw new Error("Candidate not found, or their resume has expired.");
@@ -222,7 +222,7 @@ export class InterviewScheduler {
     }
 
     const pc = pipelineService.get(interview.pipelineCandidateId);
-    const candidateName = pc ? candidateService.list().find((c) => c.candidateId === pc.candidateId)?.name ?? "the candidate" : "the candidate";
+    const candidateName = pc ? (await candidateService.listForSystemUse()).find((c) => c.candidateId === pc.candidateId)?.name ?? "the candidate" : "the candidate";
     const job = pc ? jobService.get(pc.jobId) : undefined;
 
     const completion = await openai.chat.completions.create({

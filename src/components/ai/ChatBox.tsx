@@ -26,6 +26,8 @@ type ChatBoxProps = {
   recruiterMode?: boolean;
   /** When true, the Recruitment Pipeline is active (see /recruitment) — chat can query jobs, pipeline stages, interviews, and hiring funnel data. No session ID exists for this one either. */
   recruitmentMode?: boolean;
+  /** Phase 17 Milestone 7 — called after every chat turn resolves (success or failure), whenever provided. Lets the host page resync any server-side state a chat-driven command might have mutated outside of the page's own UI (e.g. a mock interview session paused/skipped/ended via natural language, which ChatBox itself has no other way to report back). */
+  onAfterMessage?: () => void;
   title?: string;
   subtitle?: string;
   placeholder?: string;
@@ -44,6 +46,7 @@ export default function ChatBox({
   linkedinId,
   recruiterMode,
   recruitmentMode,
+  onAfterMessage,
   title = "AI Assistant",
   subtitle = "Ask about Zafrul's profile, projects, blogs and interview prep",
   placeholder = "Ask about Java, Spring Boot, Angular, projects...",
@@ -113,6 +116,11 @@ export default function ChatBox({
       ]);
     } finally {
       setLoading(false);
+      // Fires regardless of success/failure — a failed request may still
+      // have mutated server-side state before erroring (or the caller may
+      // simply want to re-sync on every turn); the callback itself decides
+      // what, if anything, to refetch.
+      onAfterMessage?.();
     }
   }
 

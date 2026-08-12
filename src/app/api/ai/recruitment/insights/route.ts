@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const interviews = jobId ? interviewScheduler.list({ jobId }) : interviewScheduler.list();
   const offers = jobId ? offerService.list({ jobId }) : offerService.list();
 
-  const insights = computeInsights({ jobId, pipelineCandidates, job, interviews, offers });
+  const insights = await computeInsights({ jobId, pipelineCandidates, job, interviews, offers });
 
   return NextResponse.json(insights);
 }

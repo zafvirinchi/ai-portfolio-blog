@@ -4,13 +4,23 @@ import { useCallback, useEffect, useState } from "react";
 
 import ChatBox from "@/components/ai/ChatBox";
 import Tabs, { TabItem } from "@/components/ui/Tabs";
+import RecruiterAnalyticsTab from "@/components/recruiter/RecruiterAnalyticsTab";
 import RecruiterDashboardTab from "@/components/recruiter/RecruiterDashboardTab";
 import RecruiterCandidateTable from "@/components/recruiter/RecruiterCandidateTable";
 import RecruiterComparisonTab from "@/components/recruiter/RecruiterComparisonTab";
 import RecruiterInsightsTab from "@/components/recruiter/RecruiterInsightsTab";
 import RecruiterReportsTab from "@/components/recruiter/RecruiterReportsTab";
 import type { CandidateStatus } from "@/lib/ai/recruiter/candidate-schema";
-import type { CandidateSummary, DashboardSummary, RankedCandidate, TopCandidatesRecommendation } from "@/lib/ai/recruiter/candidate-types";
+import type { CandidateFitLevel, CandidateSummary, DashboardSummary, RankedCandidate, TopCandidatesRecommendation } from "@/lib/ai/recruiter/candidate-types";
+import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
+
+// Phase 16 Milestone 1, §8 — visual treatment for classifyCandidateFitLevel()'s 4 tiers.
+const FIT_LEVEL_CLASSNAME: Record<CandidateFitLevel, string> = {
+  STRONG: "bg-green-100 text-green-700",
+  GOOD: "bg-blue-100 text-blue-700",
+  MODERATE: "bg-amber-100 text-amber-700",
+  LOW: "bg-slate-100 text-slate-600",
+};
 
 const SUGGESTIONS = [
   "Who is the strongest Java candidate?",
@@ -27,6 +37,7 @@ export default function RecruiterWorkspacePage() {
   const [ranking, setRanking] = useState<RankedCandidate[] | null>(null);
   const [recommendation, setRecommendation] = useState<TopCandidatesRecommendation | null>(null);
   const [recommendLoading, setRecommendLoading] = useState(false);
+  const [jobs, setJobs] = useState<RecruiterJobRecord[]>([]);
 
   const refreshCandidates = useCallback(async () => {
     setLoadingCandidates(true);
@@ -37,6 +48,12 @@ export default function RecruiterWorkspacePage() {
     } finally {
       setLoadingCandidates(false);
     }
+  }, []);
+
+  const refreshJobs = useCallback(async () => {
+    const response = await fetch("/api/ai/recruiter/jobs");
+    const data = await response.json();
+    if (response.ok) setJobs(data);
   }, []);
 
   const refreshDashboard = useCallback(async () => {
@@ -60,7 +77,8 @@ export default function RecruiterWorkspacePage() {
     refreshCandidates();
     refreshDashboard();
     refreshRanking();
-  }, [refreshCandidates, refreshDashboard, refreshRanking]);
+    refreshJobs();
+  }, [refreshCandidates, refreshDashboard, refreshRanking, refreshJobs]);
 
   async function handleStatusChange(candidateId: string, status: CandidateStatus) {
     const response = await fetch(`/api/ai/recruiter/candidates/${candidateId}/status`, {
@@ -72,6 +90,29 @@ export default function RecruiterWorkspacePage() {
     if (response.ok) {
       refreshCandidates();
       refreshDashboard();
+    } else {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Status update failed.");
+    }
+  }
+
+  // Phase 16 Milestone 7, §4/§24 — throws on failure (rather than
+  // silently no-op'ing) so RecruiterCandidateTable's bulk action bar
+  // can surface exactly why the whole batch was rejected (e.g. one
+  // selected candidate can't legally reach the target status).
+  async function handleBulkStatusChange(candidateIds: string[], status: CandidateStatus) {
+    const response = await fetch("/api/ai/recruiter/candidates/bulk-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ candidateIds, status }),
+    });
+
+    if (response.ok) {
+      await refreshCandidates();
+      await refreshDashboard();
+    } else {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || "Bulk status update failed.");
     }
   }
 
@@ -98,6 +139,7 @@ export default function RecruiterWorkspacePage() {
         <RecruiterDashboardTab
           dashboard={dashboard}
           loadingDashboard={loadingDashboard}
+          candidates={candidates}
           onRefreshDashboard={refreshDashboard}
           onImported={() => {
             refreshCandidates();
@@ -126,8 +168,19 @@ export default function RecruiterWorkspacePage() {
             {ranking && ranking.length > 0 ? (
               <ol className="space-y-1 text-sm text-slate-700">
                 {ranking.slice(0, 10).map((item) => (
-                  <li key={item.candidateId}>
-                    #{item.rank} {item.summary.name} — score {item.rankingScore}/100
+                  <li key={item.candidateId} className="flex items-center gap-2">
+                    <span>
+                      #{item.rank} {item.summary.name}
+                    </span>
+                    <span aria-label="Candidate fit score" className="font-semibold">
+                      {item.rankingScore}/100
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${FIT_LEVEL_CLASSNAME[item.level]}`}
+                      aria-label={`Candidate fit level: ${item.level}`}
+                    >
+                      {item.level}
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -140,13 +193,34 @@ export default function RecruiterWorkspacePage() {
             )}
           </div>
 
-          <RecruiterCandidateTable candidates={candidates} loading={loadingCandidates} onStatusChange={handleStatusChange} />
+          <RecruiterCandidateTable
+            candidates={candidates}
+            jobs={jobs}
+            loading={loadingCandidates}
+            onStatusChange={handleStatusChange}
+            onBulkStatusChange={handleBulkStatusChange}
+          />
         </div>
       ),
     },
-    { id: "comparison", label: "Comparison", content: <RecruiterComparisonTab candidates={candidates} /> },
+    {
+      id: "interview-queue",
+      label: "Interview Queue",
+      content: (
+        <RecruiterCandidateTable
+          candidates={candidates}
+          jobs={jobs}
+          loading={loadingCandidates}
+          onStatusChange={handleStatusChange}
+          onBulkStatusChange={handleBulkStatusChange}
+          scope="interview"
+        />
+      ),
+    },
+    { id: "comparison", label: "Comparison", content: <RecruiterComparisonTab candidates={candidates} jobs={jobs} /> },
+    { id: "analytics", label: "Analytics", content: <RecruiterAnalyticsTab jobs={jobs} /> },
     { id: "insights", label: "Insights", content: <RecruiterInsightsTab candidates={candidates} /> },
-    { id: "reports", label: "Reports", content: <RecruiterReportsTab candidates={candidates} /> },
+    { id: "reports", label: "Reports", content: <RecruiterReportsTab candidates={candidates} jobs={jobs} /> },
   ];
 
   return (

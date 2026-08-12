@@ -3,35 +3,41 @@ import { scoreAts } from "./ats-engine";
 import { matchExperience } from "./experience-engine";
 import { EducationMatch, ExperienceMatch, JobDescription } from "./jd-schema";
 import { AtsCategoryScores } from "./jd-types";
-import { KeywordMatchResult, matchKeywords } from "./keyword-engine";
+import { classifyCertificationRequirements, classifyEducationRequirements, KeywordMatchResult, matchCredit, matchKeywords } from "./keyword-engine";
 
 // Orchestrates keyword + experience + ats-engine, plus education matching
 // (Step 4 — small enough to live here rather than as its own file, per the
 // spec's 10-file list). Everything here is deterministic; the only
 // generative step is optimizer.ts, called separately by jd-service.ts.
 
+/**
+ * Phase 13 Milestone 17 — consolidated onto classifyEducationRequirements()/
+ * classifyCertificationRequirements() (keyword-engine.ts), the same
+ * per-item classifiers the Education/Certification proposal builder and
+ * the JD-optimization review UI use. Previously this function computed
+ * its own aggregate matched/missing lists via matchEducationRequirements()
+ * + matchKeywords() + an inline "better alternative" filter — three
+ * separate computations reaching the same conclusions the classifiers
+ * now express directly. EducationMatch's external shape (matched/
+ * missing/betterAlternatives) is unchanged; verified behavior-identical
+ * against the existing jd-matcher/keyword-engine test suites before and
+ * after this refactor. matchEducationRequirements() itself is untouched
+ * and still used directly by ats-engine.ts's scoreEducation() (a
+ * different aggregate shape — a percentage score, not a per-item
+ * breakdown — consolidating that one too was judged unnecessary
+ * regression risk for no behavior change; see Milestone 17's docs).
+ */
 function matchEducation(resume: Resume, jd: JobDescription): EducationMatch {
   const resumeDegrees = resume.education.map((entry) => entry.degree);
-  const degreeMatch = matchKeywords(resumeDegrees, jd.educationRequired);
+  const degreeResults = classifyEducationRequirements(resumeDegrees, jd.educationRequired);
 
   const resumeCertNames = resume.certifications.map((cert) => cert.name);
-  const certMatch = matchKeywords(resumeCertNames, jd.certifications);
-
-  // "Better alternative": a missing JD cert where the resume has a
-  // related-but-not-exact cert from the same vendor/area (same first
-  // word) — flagged as a near-miss rather than a flat "missing".
-  const betterAlternatives = certMatch.missing.filter((jdCert) =>
-    resumeCertNames.some((resumeCert) => {
-      const jdFirstWord = jdCert.toLowerCase().split(" ")[0] ?? "";
-      const resumeFirstWord = resumeCert.toLowerCase().split(" ")[0] ?? "";
-      return jdFirstWord.length > 3 && jdFirstWord === resumeFirstWord;
-    })
-  );
+  const certResults = classifyCertificationRequirements(resumeCertNames, jd.certifications);
 
   return {
-    matched: [...degreeMatch.matched, ...certMatch.matched],
-    missing: [...degreeMatch.missing, ...certMatch.missing.filter((cert) => !betterAlternatives.includes(cert))],
-    betterAlternatives,
+    matched: [...degreeResults.filter((result) => result.status !== "missing").map((result) => result.requirement), ...certResults.filter((result) => result.status === "matched").map((result) => result.requirement)],
+    missing: [...degreeResults.filter((result) => result.status === "missing").map((result) => result.requirement), ...certResults.filter((result) => result.status === "missing").map((result) => result.requirement)],
+    betterAlternatives: certResults.filter((result) => result.status === "related").map((result) => result.requirement),
   };
 }
 
@@ -92,7 +98,7 @@ export function computeJdMatch(resume: Resume, jd: JobDescription): JdMatchCompu
     Math.min(
       100,
       Math.round(
-        (jdSkills.length > 0 ? (keywordMatch.matched.length / jdSkills.length) * 100 : 100) * 0.45 +
+        (jdSkills.length > 0 ? (matchCredit(keywordMatch) / jdSkills.length) * 100 : 100) * 0.45 +
           experienceMatch.score * 0.35 +
           ats.education * 0.2
       )

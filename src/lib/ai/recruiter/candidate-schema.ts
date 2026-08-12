@@ -19,6 +19,39 @@ export const CANDIDATE_STATUSES = [
 ] as const;
 export type CandidateStatus = (typeof CANDIDATE_STATUSES)[number];
 
+/**
+ * Phase 16 Milestone 7, §1 — audited first: this existing 7-value enum
+ * already covers the requested NEW/EVALUATED/SHORTLISTED/REVIEW/
+ * INTERVIEW/REJECTED/HIRED workflow (Pending Review ≈ New/Review — the
+ * status every candidate starts at; "Evaluated" is not a status at all,
+ * it's the separate, already-existing EvaluationStatus field from
+ * Milestone 4; Shortlisted/Interview Scheduled/Rejected/Hired already
+ * exist verbatim). No status was added, renamed, or removed — this is
+ * purely a transition GRAPH over the existing enum, preserving full
+ * backward compatibility.
+ *
+ * Deterministic, server-validated rules (§1/§6): every status can move
+ * directly to Rejected (a recruiter can reject at any stage); Hired
+ * and Rejected are near-terminal, reopening only to Pending Review (a
+ * correction path for mistakes, not a new workflow stage); otherwise
+ * transitions follow the natural screening progression. A transition
+ * to the SAME status is always valid (see isValidStatusTransition) —
+ * required for idempotent shortlist/unshortlist operations (§14).
+ */
+export const ALLOWED_STATUS_TRANSITIONS: Record<CandidateStatus, CandidateStatus[]> = {
+  "Pending Review": ["Shortlisted", "On Hold", "Rejected"],
+  Shortlisted: ["Pending Review", "Interview Scheduled", "On Hold", "Rejected"],
+  "Interview Scheduled": ["Shortlisted", "Offer", "On Hold", "Rejected"],
+  "On Hold": ["Pending Review", "Shortlisted", "Interview Scheduled", "Rejected"],
+  Offer: ["Hired", "On Hold", "Rejected"],
+  Hired: ["Pending Review"],
+  Rejected: ["Pending Review"],
+};
+
+export function isValidStatusTransition(from: CandidateStatus, to: CandidateStatus): boolean {
+  return from === to || ALLOWED_STATUS_TRANSITIONS[from].includes(to);
+}
+
 // The spec's fixed 12-tag palette — closed-set, no arbitrary custom tags.
 export const CANDIDATE_TAGS = [
   "Backend",

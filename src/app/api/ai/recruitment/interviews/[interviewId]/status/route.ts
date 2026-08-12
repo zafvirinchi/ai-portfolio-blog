@@ -17,7 +17,7 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json({ error: `status must be one of: ${INTERVIEW_STATUSES.join(", ")}` }, { status: 400 });
     }
 
-    const interview = interviewScheduler.updateStatus(interviewId, status);
+    const interview = await interviewScheduler.updateStatus(interviewId, status);
 
     return NextResponse.json(interview);
   } catch (error) {

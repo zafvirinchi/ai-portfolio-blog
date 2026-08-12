@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { openai } from "../openai";
+import { delimitedDataBlock } from "../prompt-security";
 import { Resume } from "../resume/resume-schema";
 import { JobDescription } from "../job-description/jd-schema";
 import { IDEAL_ANSWER_JSON_SCHEMA, IdealAnswerResult, starAnswerSchema, technicalAnswerSchema } from "./prep-schema";
@@ -18,7 +19,18 @@ const llmResponseSchema = z.object({
   star: starAnswerSchema.nullable(),
 });
 
-function buildAnswerMessages(question: string, resume: Resume, jd: JobDescription) {
+// Phase 17 Milestone 1, §5 — resume/JD content wrapped in the existing
+// delimitedDataBlock() helper, matching question-generator.ts's own
+// sibling fix in this same package.
+export function buildAnswerMessages(question: string, resume: Resume, jd: JobDescription) {
+  const resumeBlock = delimitedDataBlock(
+    "RESUME DATA",
+    `Years of experience: ${resume.yearsOfExperience ?? "unknown"}\nWork experience: ${resume.workExperience
+      .map((job) => `${job.title} at ${job.company}`)
+      .join("; ")}\nProjects: ${resume.projects.map((project) => project.name).join(", ")}`
+  );
+  const jdBlock = delimitedDataBlock("JOB DESCRIPTION DATA", `${jd.jobTitle ?? "role"} at ${jd.companyName ?? "company"}`);
+
   return [
     {
       role: "system" as const,
@@ -52,13 +64,7 @@ the topic — this is general knowledge, not a claim about the candidate.`,
     },
     {
       role: "user" as const,
-      content: `Question: ${question}\n\nCandidate resume (summary):\nYears of experience: ${
-        resume.yearsOfExperience ?? "unknown"
-      }\nWork experience: ${resume.workExperience
-        .map((job) => `${job.title} at ${job.company}`)
-        .join("; ")}\nProjects: ${resume.projects.map((project) => project.name).join(", ")}\n\nJob description: ${
-        jd.jobTitle ?? "role"
-      } at ${jd.companyName ?? "company"}`,
+      content: `Question: ${question}\n\n${resumeBlock}\n\n${jdBlock}`,
     },
   ];
 }

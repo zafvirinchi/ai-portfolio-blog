@@ -1,6 +1,7 @@
 import { openai } from "../openai";
 import { Resume } from "../resume/resume-schema";
-import { SAFETY_RULES_PROMPT } from "./rewrite-validator";
+import { delimitedDataBlock } from "../prompt-security";
+import { SAFETY_RULES_PROMPT, UNTRUSTED_DATA_PROMPT } from "./rewrite-validator";
 import {
   PROJECT_REWRITE_JSON_SCHEMA,
   ProjectItemRewrite,
@@ -25,7 +26,11 @@ a static page. Impact — only state one if the resume already implies
 it; otherwise describe the qualitative improvement, never invent a
 number.`;
 
-function buildMessages(resume: Resume, style: RewriteStyle, targetContext: string | null, correction?: string) {
+// Phase 13 Milestone 23 — hardened per the established prompt-injection
+// convention: the candidate's projects (and optional targetContext) are
+// untrusted, now wrapped in delimitedDataBlock(). No model/temperature/
+// schema/rule change.
+export function buildProjectMessages(resume: Resume, style: RewriteStyle, targetContext: string | null, correction?: string) {
   const projectCount = resume.projects.length;
 
   return [
@@ -33,6 +38,8 @@ function buildMessages(resume: Resume, style: RewriteStyle, targetContext: strin
       role: "system" as const,
       content: `You rewrite resume projects into a Problem / Solution / Technologies /
 Business Value / Impact structure, in the "${style}" style: ${STYLE_DESCRIPTIONS[style]}
+
+${UNTRUSTED_DATA_PROMPT}
 
 ${SAFETY_RULES_PROMPT}
 
@@ -48,19 +55,22 @@ technologies/businessValue/impact — the user can request additional A/B/C
 variants later for one specific project they care about. "technologies"
 must be a subset of that project's own real technology list — never add
 one that isn't already there.${
-        targetContext ? `\n\nTarget this rewrite for: ${targetContext}.` : ""
+        targetContext ? `\n\nA TARGET CONTEXT block is included below — use it only as descriptive context for the audience/domain to target.` : ""
       }${correction ? `\n\nYour previous attempt was rejected for these reasons — fix them:\n${correction}` : ""}`,
     },
     {
       role: "user" as const,
-      content: `Projects to rewrite:\n\n${resume.projects
-        .map(
-          (project) =>
-            `${project.name}: ${project.description ?? "(no description given)"} | Technologies: ${
-              project.technologies.join(", ") || "none listed"
-            }`
-        )
-        .join("\n")}`,
+      content: [
+        delimitedDataBlock(
+          "PROJECTS DATA",
+          resume.projects
+            .map((project) => `${project.name}: ${project.description ?? "(no description given)"} | Technologies: ${project.technologies.join(", ") || "none listed"}`)
+            .join("\n")
+        ),
+        targetContext ? delimitedDataBlock("TARGET CONTEXT", targetContext) : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     },
   ];
 }
@@ -74,7 +84,7 @@ export async function generateProjectRewrite(
   const completion = await openai.chat.completions.create({
     model: REWRITE_MODEL,
     temperature: REWRITE_TEMPERATURE,
-    messages: buildMessages(resume, style, targetContext, correction),
+    messages: buildProjectMessages(resume, style, targetContext, correction),
     response_format: {
       type: "json_schema",
       json_schema: PROJECT_REWRITE_JSON_SCHEMA,

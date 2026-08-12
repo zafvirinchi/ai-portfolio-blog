@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 import { INTERVIEW_TYPES, SESSION_MODES } from "@/lib/ai/mock-interview/session-schema";
@@ -14,8 +15,18 @@ type Props = {
   onStarted: (result: SessionTurnResult) => void;
 };
 
+function isInterviewType(value: string | null): value is InterviewType {
+  return value !== null && (INTERVIEW_TYPES as readonly string[]).includes(value);
+}
+
 export default function MockInterviewSetup({ resumeId, jdMatchId, prepId, hasSession, onStarted }: Props) {
-  const [interviewType, setInterviewType] = useState<InterviewType>("Mixed");
+  // Phase 17 Milestone 5 — the Debrief's "Practice weak category" CTA
+  // links back here with ?interviewType=<type> as a starting-form
+  // preselection only; it never bypasses this form or the question-
+  // selection cascade itself. Falls back to "Mixed" for any missing or
+  // invalid value, exactly as before this milestone.
+  const preselectedType = useSearchParams().get("interviewType");
+  const [interviewType, setInterviewType] = useState<InterviewType>(isInterviewType(preselectedType) ? preselectedType : "Mixed");
   const [mode, setMode] = useState<SessionMode>("practice");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

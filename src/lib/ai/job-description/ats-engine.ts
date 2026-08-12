@@ -2,7 +2,7 @@ import { ACHIEVEMENT_PATTERNS, TECHNOLOGY_DICTIONARY, WEAK_PHRASES } from "../re
 import { Resume } from "../resume/resume-schema";
 import { JobDescription } from "./jd-schema";
 import { AtsCategoryScores } from "./jd-types";
-import { matchKeywords } from "./keyword-engine";
+import { matchCredit, matchEducationRequirements, matchKeywords } from "./keyword-engine";
 
 // Deterministic, no-LLM ATS scoring across 12 categories, weighted to sum
 // to 100. Reuses resume-enterprise/ats's TECHNOLOGY_DICTIONARY/
@@ -11,7 +11,11 @@ import { matchKeywords } from "./keyword-engine";
 // rebuilding a third copy of the same reference data, applied here against
 // the *old* `Resume` type instead of `EnterpriseResume`.
 
-const WEIGHTS: Record<Exclude<keyof AtsCategoryScores, "overall">, number> = {
+// Phase 15 Milestone 7 — exported (unchanged values, unchanged scoring
+// behavior) for the same reason as resume-score.ts's WEIGHTS — the ATS
+// Explainability layer needs the real per-category weights to compute
+// an honest impact estimate, never a duplicated/guessed copy.
+export const WEIGHTS: Record<Exclude<keyof AtsCategoryScores, "overall">, number> = {
   keyword: 20,
   experience: 15,
   education: 8,
@@ -40,8 +44,8 @@ function scoreKeyword(resume: Resume, jd: JobDescription): number {
 
   if (jdSkills.length === 0) return 100;
 
-  const { matched } = matchKeywords(resumeSkills, jdSkills);
-  return clamp((matched.length / jdSkills.length) * 100);
+  const result = matchKeywords(resumeSkills, jdSkills);
+  return clamp((matchCredit(result) / jdSkills.length) * 100);
 }
 
 function scoreEducation(resume: Resume, jd: JobDescription): number {
@@ -49,9 +53,9 @@ function scoreEducation(resume: Resume, jd: JobDescription): number {
   if (resume.education.length === 0) return 0;
 
   const resumeDegrees = resume.education.map((entry) => entry.degree);
-  const { matched } = matchKeywords(resumeDegrees, jd.educationRequired);
+  const result = matchEducationRequirements(resumeDegrees, jd.educationRequired);
 
-  return clamp((matched.length / jd.educationRequired.length) * 100);
+  return clamp((matchCredit(result) / jd.educationRequired.length) * 100);
 }
 
 // Same formula resume/resume-score.ts's (private, unexported) scoreFormatting
@@ -106,8 +110,8 @@ function scoreProject(resume: Resume, jd: JobDescription): number {
   score += Math.round((withTech / resume.projects.length) * 30);
 
   if (jdSkills.length > 0) {
-    const { matched } = matchKeywords(projectTechTokens, jdSkills);
-    score += Math.round((matched.length / jdSkills.length) * 30);
+    const result = matchKeywords(projectTechTokens, jdSkills);
+    score += Math.round((matchCredit(result) / jdSkills.length) * 30);
   } else {
     score += 30;
   }
@@ -138,9 +142,9 @@ function scoreCertification(resume: Resume, jd: JobDescription): number {
   if (jd.certifications.length === 0) return resume.certifications.length > 0 ? 100 : 80;
 
   const resumeCertNames = resume.certifications.map((cert) => cert.name);
-  const { matched } = matchKeywords(resumeCertNames, jd.certifications);
+  const result = matchKeywords(resumeCertNames, jd.certifications);
 
-  return clamp((matched.length / jd.certifications.length) * 100);
+  return clamp((matchCredit(result) / jd.certifications.length) * 100);
 }
 
 function scoreCategoryAgainstJd(
@@ -158,15 +162,15 @@ function scoreCategoryAgainstJd(
     return resumeCategorySkills.length > 0 ? 100 : 70;
   }
 
-  const { matched } = matchKeywords(resumeCategorySkills, jdCategorySkills);
-  return clamp((matched.length / jdCategorySkills.length) * 100);
+  const result = matchKeywords(resumeCategorySkills, jdCategorySkills);
+  return clamp((matchCredit(result) / jdCategorySkills.length) * 100);
 }
 
 function scoreSoftSkills(resume: Resume, jd: JobDescription): number {
   if (jd.softSkills.length === 0) return 100;
 
-  const { matched } = matchKeywords(resume.softSkills, jd.softSkills);
-  return clamp((matched.length / jd.softSkills.length) * 100);
+  const result = matchKeywords(resume.softSkills, jd.softSkills);
+  return clamp((matchCredit(result) / jd.softSkills.length) * 100);
 }
 
 /**

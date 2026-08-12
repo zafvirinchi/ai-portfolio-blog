@@ -13,7 +13,7 @@ type Params = {
 export async function GET(_req: Request, { params }: Params) {
   const { jobId } = await params;
   const pipelineCandidates = pipelineService.list(jobId);
-  const allCandidates = candidateService.list();
+  const allCandidates = await candidateService.listForSystemUse();
 
   // ATS/JD Match must reflect THIS job's own match (pc.jdMatchId), not
   // Milestone 8's workspace-level match on the candidate summary — see

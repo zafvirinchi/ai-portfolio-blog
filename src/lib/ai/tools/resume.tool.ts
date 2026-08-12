@@ -101,6 +101,9 @@ function buildJdMatchContext(record: JdMatchRecord): string {
     `Experience match: ${matchResult.experienceMatch.level} — ${matchResult.experienceMatch.reasoning}`,
     "",
     `Matched skills: ${matchResult.matchedSkills.join(", ") || "none"}`,
+    `Partially matched skills (same technology family, not a confirmed exact match): ${
+      matchResult.partialSkills.map((p) => `${p.jdSkill} (via ${p.resumeSkill})`).join(", ") || "none"
+    }`,
     `Missing skills: ${matchResult.missingSkills.join(", ") || "none"}`,
     `Missing keywords: ${matchResult.missingKeywords.join(", ") || "none"}`,
     `Missing education/certifications: ${matchResult.educationMatch.missing.join(", ") || "none"}`,
@@ -434,7 +437,7 @@ function detectTopN(question: string): number {
   return match ? parseInt(match[1], 10) : 5;
 }
 
-async function handleRecruiterMessage(question: string): Promise<string> {
+async function handleRecruiterMessage(question: string, recruiterId: string): Promise<string> {
   const lower = question.toLowerCase();
 
   try {
@@ -445,33 +448,32 @@ async function handleRecruiterMessage(question: string): Promise<string> {
         return `Tell me which two (or more) candidates to compare by name, e.g. "Compare Jane Doe and John Smith".`;
       }
 
-      const matched = names
-        .map((name) => candidateService.findByNameFragment(name)[0])
-        .filter((candidate): candidate is CandidateSummary => Boolean(candidate));
+      const matchedByName = await Promise.all(names.map((name) => candidateService.findByNameFragment(name, recruiterId)));
+      const matched = matchedByName.map((candidates) => candidates[0]).filter((candidate): candidate is CandidateSummary => Boolean(candidate));
 
       if (matched.length < 2) {
         return `I couldn't find at least two matching candidates in the workspace for "${names.join('" and "')}".`;
       }
 
-      const result = await candidateService.compare(matched.map((candidate) => candidate.candidateId));
+      const result = await candidateService.compare(recruiterId, matched.map((candidate) => candidate.candidateId));
       return `Comparison of ${result.candidates.map((candidate) => candidate.name).join(", ")}:\n\n${result.recommendation}\n\n${result.rankingRationale}`;
     }
 
     if (/\brecommend\b.*\bcandidates?\b|\btop\s+\d+\s+candidates?\b/.test(lower)) {
       const topN = detectTopN(question);
-      const result = await candidateService.recommendTopCandidates(topN);
+      const result = await candidateService.recommendTopCandidates(recruiterId, topN);
       return `Top ${result.candidates.length} recommended candidates:\n\n${summarizeCandidates(result.candidates, topN)}\n\n${result.summary}`;
     }
 
     if (/\bready for interview\b|\binterview.?ready\b/.test(lower)) {
-      const ready = candidateService.findReadyForInterview();
+      const ready = await candidateService.findReadyForInterview(recruiterId);
       return `Candidates ready for interview:\n\n${summarizeCandidates(ready, 10)}`;
     }
 
     if (/\bstrongest\b|\bbest\b/.test(lower)) {
       const skillMatch = question.match(/\b(?:strongest|best)\s+([a-z0-9][a-z0-9+.# ]*?)\s+candidate/i);
       const term = skillMatch ? skillMatch[1].trim() : null;
-      const pool = term ? candidateService.searchBySkill(term) : candidateService.list();
+      const pool = term ? await candidateService.searchBySkill(term, recruiterId) : await candidateService.list(recruiterId);
 
       if (pool.length === 0) {
         return term ? `No candidates with "${term}" experience found in the workspace.` : "No candidates in the workspace yet.";
@@ -490,7 +492,7 @@ async function handleRecruiterMessage(question: string): Promise<string> {
         return `Tell me which skill or technology to search for, e.g. "Who has Spring Boot experience?"`;
       }
 
-      const matches = candidateService.searchBySkill(term);
+      const matches = await candidateService.searchBySkill(term, recruiterId);
       return `Candidates with "${term}" experience:\n\n${summarizeCandidates(matches, 10)}`;
     }
 
@@ -531,12 +533,18 @@ function detectJobTitleFragment(question: string): string | null {
 
 async function handleRecruitmentMessage(question: string): Promise<string> {
   const lower = question.toLowerCase();
-  const allCandidates = candidateService.list();
+  // The Recruitment Pipeline (Phase 13 Milestone 9) is a separate,
+  // sibling feature from the Recruiter Workspace (candidate ownership
+  // added in Phase 16 Milestone 2) with its own not-yet-authenticated
+  // job.recruiter/hiringManager actor model — out of this milestone's
+  // scope to redesign, so it deliberately keeps using the unscoped
+  // system-use accessors rather than a recruiterId it doesn't have.
+  const allCandidates = await candidateService.listForSystemUse();
 
   try {
     if (/\btop\b.*\bcandidates?\b/.test(lower)) {
       const term = detectSkillTermForTopCandidates(question);
-      const pool = term ? candidateService.searchBySkill(term) : allCandidates;
+      const pool = term ? await candidateService.searchBySkillForSystemUse(term) : allCandidates;
 
       const ranked = [...pool]
         .sort((a, b) => computeRankingScore(b.scores) - computeRankingScore(a.scores))
@@ -979,10 +987,12 @@ export class ResumeTool implements AITool {
       };
     }
 
-    const recruiterActive = recruiterRequestContext.getStore()?.active;
+    const recruiterStore = recruiterRequestContext.getStore();
 
-    if (recruiterActive) {
-      const context = await handleRecruiterMessage(question);
+    if (recruiterStore?.active) {
+      const context = recruiterStore.recruiterId
+        ? await handleRecruiterMessage(question, recruiterStore.recruiterId)
+        : "Sign in as a recruiter to use the Recruiter Workspace assistant.";
 
       return {
         success: true,

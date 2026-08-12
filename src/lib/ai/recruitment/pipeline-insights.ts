@@ -184,18 +184,19 @@ function computeFastHiring(pipelineCandidates: PipelineCandidate[], allCandidate
 // Milestone 8 candidate, not scoped to one job's pipeline, since
 // duplicate/incomplete profiles are a candidate-pool concern.
 
-function computeDuplicateProfiles(allCandidates: CandidateSummary[]): DuplicateProfileInsight[] {
+async function computeDuplicateProfiles(allCandidates: CandidateSummary[]): Promise<DuplicateProfileInsight[]> {
   const byEmail = new Map<string, { candidateId: string; name: string }[]>();
 
-  for (const summary of allCandidates) {
-    const profile = candidateService.getProfile(summary.candidateId);
-    const email = profile?.resume.contact.email?.toLowerCase().trim();
-    if (!email) continue;
+  const profiles = await Promise.all(allCandidates.map((summary) => candidateService.getProfileForSystemUse(summary.candidateId)));
+
+  allCandidates.forEach((summary, index) => {
+    const email = profiles[index]?.resume.contact.email?.toLowerCase().trim();
+    if (!email) return;
 
     const entries = byEmail.get(email) ?? [];
     entries.push({ candidateId: summary.candidateId, name: summary.name });
     byEmail.set(email, entries);
-  }
+  });
 
   const results: DuplicateProfileInsight[] = [];
 
@@ -212,12 +213,14 @@ function computeDuplicateProfiles(allCandidates: CandidateSummary[]): DuplicateP
   return results;
 }
 
-function computeIncompleteProfiles(allCandidates: CandidateSummary[]): IncompleteProfileInsight[] {
+async function computeIncompleteProfiles(allCandidates: CandidateSummary[]): Promise<IncompleteProfileInsight[]> {
   const results: IncompleteProfileInsight[] = [];
 
-  for (const summary of allCandidates) {
-    const profile = candidateService.getProfile(summary.candidateId);
-    if (!profile) continue;
+  const profiles = await Promise.all(allCandidates.map((summary) => candidateService.getProfileForSystemUse(summary.candidateId)));
+
+  allCandidates.forEach((summary, index) => {
+    const profile = profiles[index];
+    if (!profile) return;
 
     const missing: string[] = [];
     if (!profile.resume.summary) missing.push("summary");
@@ -229,19 +232,20 @@ function computeIncompleteProfiles(allCandidates: CandidateSummary[]): Incomplet
     if (missing.length > 0) {
       results.push({ candidateId: summary.candidateId, candidateName: summary.name, missingFields: missing });
     }
-  }
+  });
 
   return results;
 }
 
-export function computeInsights(params: {
+export async function computeInsights(params: {
   jobId: string | null;
   pipelineCandidates: PipelineCandidate[];
   job: Job | null;
   interviews: InterviewSchedule[];
   offers: Offer[];
-}): PipelineInsights {
-  const allCandidates = candidateService.list();
+}): Promise<PipelineInsights> {
+  const allCandidates = await candidateService.listForSystemUse();
+  const [duplicateProfiles, incompleteProfiles] = await Promise.all([computeDuplicateProfiles(allCandidates), computeIncompleteProfiles(allCandidates)]);
 
   return {
     jobId: params.jobId,
@@ -254,7 +258,7 @@ export function computeInsights(params: {
     topCandidates: computeTopCandidates(params.pipelineCandidates, allCandidates),
     highPotentialCandidates: computeHighPotential(params.pipelineCandidates, allCandidates),
     fastHiringOpportunities: computeFastHiring(params.pipelineCandidates, allCandidates),
-    duplicateProfiles: computeDuplicateProfiles(allCandidates),
-    incompleteProfiles: computeIncompleteProfiles(allCandidates),
+    duplicateProfiles,
+    incompleteProfiles,
   };
 }

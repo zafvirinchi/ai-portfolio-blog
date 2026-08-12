@@ -1,6 +1,7 @@
 import { openai } from "../openai";
 import { searchInterviewQuestions } from "../interview-chat/interview-search";
 import { InterviewCandidate } from "../interview-chat/interview-types";
+import { delimitedDataBlock } from "../prompt-security";
 import { Resume } from "../resume/resume-schema";
 import { JobDescription } from "../job-description/jd-schema";
 import {
@@ -167,8 +168,22 @@ export async function coverTechnicalTopicsFromKb(
   return { covered, uncoveredTopics };
 }
 
-function buildQuestionGenerationMessages(resume: Resume, jd: JobDescription, uncoveredTopics: string[]) {
+// Phase 17 Milestone 1, §5 — resume/JD content wrapped in the existing
+// delimitedDataBlock() helper (../prompt-security.ts) — the same
+// untrusted-data boundary 20+ other generative call sites across this
+// codebase already use for arbitrary, attacker-influenceable resume/JD
+// text. No model/temperature/schema change; the fabrication-prevention
+// coaching-voice instructions above are unchanged.
+export function buildQuestionGenerationMessages(resume: Resume, jd: JobDescription, uncoveredTopics: string[]) {
   const projectNames = resume.projects.slice(0, 4).map((project) => project.name);
+
+  const resumeSummary = `Name: ${resume.contact.name ?? "Unknown"}\nYears of experience: ${
+    resume.yearsOfExperience ?? "unknown"
+  }\nSkills: ${[...resume.skills, ...resume.technicalSkills].join(", ")}\nWork experience: ${resume.workExperience
+    .map((job) => `${job.title} at ${job.company}`)
+    .join("; ")}\nProjects: ${resume.projects.map((project) => `${project.name} (${project.technologies.join(", ")})`).join("; ")}`;
+
+  const jdSummary = `${jd.jobTitle ?? "role"} at ${jd.companyName ?? "company"}:\n${JSON.stringify(jd, null, 2)}`;
 
   return [
     {
@@ -222,15 +237,7 @@ SECTIONS:
     },
     {
       role: "user" as const,
-      content: `Candidate resume (summary):\nName: ${resume.contact.name ?? "Unknown"}\nYears of experience: ${
-        resume.yearsOfExperience ?? "unknown"
-      }\nSkills: ${[...resume.skills, ...resume.technicalSkills].join(", ")}\nWork experience: ${resume.workExperience
-        .map((job) => `${job.title} at ${job.company}`)
-        .join("; ")}\nProjects: ${resume.projects
-        .map((project) => `${project.name} (${project.technologies.join(", ")})`)
-        .join("; ")}\n\n---\n\nJob description (${jd.jobTitle ?? "role"} at ${
-        jd.companyName ?? "company"
-      }):\n${JSON.stringify(jd, null, 2)}`,
+      content: `${delimitedDataBlock("RESUME DATA", resumeSummary)}\n\n${delimitedDataBlock("JOB DESCRIPTION DATA", jdSummary)}`,
     },
   ];
 }

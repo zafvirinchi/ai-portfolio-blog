@@ -1,5 +1,7 @@
 import { openai } from "../openai";
 import { Resume } from "../resume/resume-schema";
+import { delimitedDataBlock } from "../prompt-security";
+import { UNTRUSTED_DATA_PROMPT } from "./rewrite-validator";
 import {
   RESUME_REWRITER_SKILL_CATEGORIES,
   SKILLS_REWRITE_JSON_SCHEMA,
@@ -10,7 +12,10 @@ import {
 const REWRITE_MODEL = "gpt-4o-mini";
 const REWRITE_TEMPERATURE = 0.2;
 
-function buildMessages(resume: Resume, correction?: string) {
+// Phase 13 Milestone 23 — hardened per the established prompt-injection
+// convention: the candidate's skill list is untrusted, now wrapped in
+// delimitedDataBlock(). No model/temperature/schema/rule change.
+export function buildSkillsMessages(resume: Resume, correction?: string) {
   const allSkills = Array.from(new Set([...resume.skills, ...resume.technicalSkills]));
 
   return [
@@ -18,6 +23,8 @@ function buildMessages(resume: Resume, correction?: string) {
       role: "system" as const,
       content: `Organize this candidate's REAL, already-listed skills into these exact
 categories: ${RESUME_REWRITER_SKILL_CATEGORIES.join(", ")}.
+
+${UNTRUSTED_DATA_PROMPT}
 
 This is pure recategorization, not an opportunity to add anything: never
 add a skill/technology the candidate doesn't already list, even one you
@@ -29,7 +36,7 @@ never duplicate a skill into more than one category.${
     },
     {
       role: "user" as const,
-      content: `Candidate's real skills: ${allSkills.join(", ") || "none listed"}`,
+      content: delimitedDataBlock("SKILLS DATA", allSkills.join(", ") || "none listed"),
     },
   ];
 }
@@ -56,7 +63,7 @@ export async function generateSkillsRewrite(resume: Resume, correction?: string)
   const completion = await openai.chat.completions.create({
     model: REWRITE_MODEL,
     temperature: REWRITE_TEMPERATURE,
-    messages: buildMessages(resume, correction),
+    messages: buildSkillsMessages(resume, correction),
     response_format: {
       type: "json_schema",
       json_schema: SKILLS_REWRITE_JSON_SCHEMA,

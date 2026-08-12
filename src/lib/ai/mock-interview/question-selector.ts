@@ -4,6 +4,7 @@ import { openai } from "../openai";
 import { coverTechnicalTopicsFromKb, deriveTechnicalTopics } from "../interview-prep/question-generator";
 import { PrepRecord } from "../interview-prep/prep-types";
 import { JobDescription } from "../job-description/jd-schema";
+import { delimitedDataBlock } from "../prompt-security";
 import { ProjectEntry, Resume } from "../resume/resume-schema";
 import {
   Difficulty,
@@ -263,12 +264,28 @@ function tryJdTemplate(
 // for this type/difficulty.
 // ---------------------------------------------------------------------------
 
-function buildFallbackMessages(session: SessionRecord, type: InterviewType, resume: Resume, jd: JobDescription, difficulty: Difficulty) {
+// Phase 17 Milestone 1, §5 — resume/JD content wrapped in the existing
+// delimitedDataBlock() helper. The system message previously interpolated
+// jd.jobTitle/companyName directly (untrusted JD text inside the
+// AUTHOR-controlled instruction message) — moved into the delimited user
+// block instead, so the system message now only ever refers to the data
+// generically ("the role described below"), consistent with how every
+// other hardened prompt in this codebase keeps untrusted content out of
+// the system message entirely.
+export function buildFallbackMessages(session: SessionRecord, type: InterviewType, resume: Resume, jd: JobDescription, difficulty: Difficulty) {
+  const resumeBlock = delimitedDataBlock("RESUME DATA", `Candidate skills: ${[...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"}.`);
+  const jdBlock = delimitedDataBlock(
+    "JOB DESCRIPTION DATA",
+    `${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}. Key skills: ${
+      [...jd.programmingLanguages, ...jd.frameworks, ...jd.cloud].join(", ") || "unknown"
+    }.`
+  );
+
   return [
     {
       role: "system" as const,
       content: `Generate exactly one new ${type} interview question at ${difficulty} difficulty for
-a candidate interviewing for ${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}.
+a candidate interviewing for the role described in the JOB DESCRIPTION DATA block below.
 
 It must be meaningfully different from every question already asked this
 session: ${session.questions.map((q) => q.text).join(" | ") || "none yet"}.
@@ -278,8 +295,7 @@ answer, hint, or evaluation criteria in your response.`,
     },
     {
       role: "user" as const,
-      content: `Candidate skills: ${[...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"}.
-JD key skills: ${[...jd.programmingLanguages, ...jd.frameworks, ...jd.cloud].join(", ") || "unknown"}.`,
+      content: `${resumeBlock}\n\n${jdBlock}`,
     },
   ];
 }

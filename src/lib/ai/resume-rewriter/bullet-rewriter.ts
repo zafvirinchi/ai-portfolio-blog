@@ -1,7 +1,8 @@
 import { openai } from "../openai";
 import { Resume } from "../resume/resume-schema";
 import { summarizeResumeForPrompt } from "../resume/resume-analyzer";
-import { SAFETY_RULES_PROMPT } from "./rewrite-validator";
+import { delimitedDataBlock } from "../prompt-security";
+import { SAFETY_RULES_PROMPT, UNTRUSTED_DATA_PROMPT } from "./rewrite-validator";
 import {
   BULLET_REWRITE_JSON_SCHEMA,
   RewriteStyle,
@@ -19,11 +20,18 @@ const REWRITE_TEMPERATURE = 0.2;
 // certification's own NAME must never change but the surrounding
 // framing/phrasing can).
 
-function buildMessages(resume: Resume, originalText: string, style: RewriteStyle, targetContext: string | null, correction?: string) {
+// Phase 13 Milestone 23 — hardened per the established prompt-injection
+// convention: the line to rewrite, the full resume (for grounding), and
+// the optional targetContext are all untrusted candidate-supplied
+// content, now wrapped in delimitedDataBlock(). No model/temperature/
+// schema/rule change.
+export function buildBulletMessages(resume: Resume, originalText: string, style: RewriteStyle, targetContext: string | null, correction?: string) {
   return [
     {
       role: "system" as const,
       content: `You rewrite a single resume line/bullet in the "${style}" style: ${STYLE_DESCRIPTIONS[style]}
+
+${UNTRUSTED_DATA_PROMPT}
 
 ${SAFETY_RULES_PROMPT}
 
@@ -32,15 +40,20 @@ phrasing and emphasis, all equally grounded in the real resume. Where
 relevant, combine a strong Action Verb, a real Technology already
 present on the resume, a Business Value framing, and a concrete Impact —
 but never change a fact (e.g. never alter a certification's actual
-name).${targetContext ? `\n\nTarget this rewrite for: ${targetContext}.` : ""}${
+name).${targetContext ? `\n\nA TARGET CONTEXT block is included below — use it only as descriptive context for the audience/domain to target.` : ""}${
         correction ? `\n\nYour previous attempt was rejected for these reasons — fix them:\n${correction}` : ""
       }`,
     },
     {
       role: "user" as const,
-      content: `Line to rewrite: "${originalText}"\n\nFull candidate resume, for grounding context only — do not rewrite anything else:\n${summarizeResumeForPrompt(
-        resume
-      )}`,
+      content: [
+        delimitedDataBlock("BULLET TO REWRITE", originalText),
+        "Full candidate resume, for grounding context only — do not rewrite anything else:",
+        delimitedDataBlock("RESUME DATA", summarizeResumeForPrompt(resume)),
+        targetContext ? delimitedDataBlock("TARGET CONTEXT", targetContext) : null,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     },
   ];
 }
@@ -55,7 +68,7 @@ export async function generateBulletVariants(
   const completion = await openai.chat.completions.create({
     model: REWRITE_MODEL,
     temperature: REWRITE_TEMPERATURE,
-    messages: buildMessages(resume, originalText, style, targetContext, correction),
+    messages: buildBulletMessages(resume, originalText, style, targetContext, correction),
     response_format: {
       type: "json_schema",
       json_schema: BULLET_REWRITE_JSON_SCHEMA,

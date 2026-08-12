@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { jdMatchService } from "@/lib/ai/job-description/jd-service";
-import { resumeOptimizer } from "@/lib/ai/job-description/resume-optimizer";
+import { ephemeralResumeOptimizer } from "@/lib/ai/job-description/resume-optimizer";
 import { resumeService } from "@/lib/ai/resume/resume-service";
 import { buildOptimizerExportSections, renderOptimizerMarkdown } from "./build-optimizer-sections";
 import { renderOptimizerDocx } from "./docx-renderer";
@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: Params) {
     return NextResponse.json({ error: "JD match result not found or expired" }, { status: 404 });
   }
 
-  const optimizerResult = resumeOptimizer.get(jdMatchId);
+  const optimizerResult = ephemeralResumeOptimizer.get(jdMatchId);
 
   if (!optimizerResult) {
     return NextResponse.json(

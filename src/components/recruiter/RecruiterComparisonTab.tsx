@@ -4,12 +4,15 @@ import { useState } from "react";
 
 import type { CandidateSummary } from "@/lib/ai/recruiter/candidate-types";
 import type { ComparisonResult } from "@/lib/ai/recruiter/candidate-types";
+import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
 
 type Props = {
   candidates: CandidateSummary[];
+  jobs: RecruiterJobRecord[];
 };
 
-export default function RecruiterComparisonTab({ candidates }: Props) {
+export default function RecruiterComparisonTab({ candidates, jobs }: Props) {
+  const jobById = new Map(jobs.map((job) => [job.id, job]));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,8 +66,16 @@ export default function RecruiterComparisonTab({ candidates }: Props) {
                   selectedIds.includes(candidate.candidateId) ? "border-blue-400 bg-blue-50" : "border-slate-200"
                 }`}
               >
-                <input type="checkbox" checked={selectedIds.includes(candidate.candidateId)} onChange={() => toggle(candidate.candidateId)} />
-                <span className="font-medium text-slate-800">{candidate.name}</span>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(candidate.candidateId)}
+                  onChange={() => toggle(candidate.candidateId)}
+                  aria-label={`Select ${candidate.name} for comparison`}
+                />
+                <span className="flex-1">
+                  <span className="block font-medium text-slate-800">{candidate.name}</span>
+                  <span className="block text-xs text-slate-400">{candidate.jobId ? jobById.get(candidate.jobId)?.title ?? "Unknown job" : "Unattached"}</span>
+                </span>
               </label>
             ))}
           </div>
@@ -79,10 +90,32 @@ export default function RecruiterComparisonTab({ candidates }: Props) {
         </button>
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       {result && (
         <div className="space-y-4">
+          {/* Phase 16 Milestone 9, §7 — renders the same table already on screen; never re-invokes /compare's LLM call. */}
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={`/api/ai/recruiter/export?type=comparison&format=csv&candidateIds=${result.candidateIds.join(",")}`}
+              aria-label="Export comparison as CSV"
+              className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Export Comparison (CSV)
+            </a>
+            <a
+              href={`/api/ai/recruiter/export?type=comparison&format=excel&candidateIds=${result.candidateIds.join(",")}`}
+              aria-label="Export comparison as XLSX"
+              className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Export Comparison (Excel)
+            </a>
+          </div>
+
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <table className="w-full min-w-[600px] text-left text-sm">
               <thead>

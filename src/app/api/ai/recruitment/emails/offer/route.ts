@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const offer = offerService.get(offerId);
     if (!offer) return NextResponse.json({ error: "Offer not found" }, { status: 404 });
 
-    const profile = candidateService.getProfile(pc.candidateId);
+    const profile = await candidateService.getProfileForSystemUse(pc.candidateId);
     if (!profile) return NextResponse.json({ error: "Candidate not found or their resume has expired" }, { status: 404 });
 
     const email = await generateOfferLetterEmail(job, profile.resume, offer);

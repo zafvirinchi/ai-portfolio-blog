@@ -18,7 +18,7 @@ export interface OfferCreateInput {
 export class OfferService {
   private readonly offers = new Map<string, Offer>();
 
-  create(input: OfferCreateInput): Offer {
+  async create(input: OfferCreateInput): Promise<Offer> {
     const pc = pipelineService.get(input.pipelineCandidateId);
 
     if (!pc) {
@@ -44,7 +44,7 @@ export class OfferService {
     pipelineService.setOfferId(input.pipelineCandidateId, offerId);
 
     const job = jobService.get(pc.jobId);
-    const candidateName = candidateService.list().find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
+    const candidateName = (await candidateService.listForSystemUse()).find((c) => c.candidateId === pc.candidateId)?.name ?? "A candidate";
 
     notificationService.emit({
       type: "Offer Generated",

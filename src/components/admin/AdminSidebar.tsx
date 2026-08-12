@@ -25,6 +25,7 @@ const navItems = [
   // Billing
   { href: "/admin/billing", label: "Billing" },
   { href: "/admin/usage", label: "AI Usage" },
+  { href: "/admin/analytics", label: "Analytics" },
 ];
 
 export default function AdminSidebar() {

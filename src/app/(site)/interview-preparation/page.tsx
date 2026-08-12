@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 
 import Tabs, { TabItem } from "@/components/ui/Tabs";
 import PrepOverview from "@/components/interview-prep/PrepOverview";
+import PrepPracticeTab from "@/components/interview-prep/PrepPracticeTab";
 import PrepTechnicalQuestions from "@/components/interview-prep/PrepTechnicalQuestions";
 import PrepHrQuestions from "@/components/interview-prep/PrepHrQuestions";
 import PrepProjectQuestions from "@/components/interview-prep/PrepProjectQuestions";
@@ -15,27 +16,76 @@ import PrepWeaknesses from "@/components/interview-prep/PrepWeaknesses";
 import PrepLearningRoadmap from "@/components/interview-prep/PrepLearningRoadmap";
 import PrepCheatSheet from "@/components/interview-prep/PrepCheatSheet";
 import type { PrepRecord } from "@/lib/ai/interview-prep/prep-types";
+import type { InterviewIntelligence } from "@/lib/ai/interview-prep/interview-intelligence-service";
 
 function InterviewPreparationContent() {
   const searchParams = useSearchParams();
   const resumeId = searchParams.get("resumeId");
   const jdMatchId = searchParams.get("jdMatchId");
+  // Phase 17 Milestone 2 — the Dynamic Resume Version entry point. Only
+  // an opaque UUID ever appears in the URL, never resume content itself.
+  const resumeVersionId = searchParams.get("resumeVersionId");
+  // Phase 17 Milestone 7 — the missing link Mock Interview's Debrief/
+  // Progress tabs need: a way to return to the EXACT report their
+  // coverage/study-plan data already came from, instead of only ever
+  // being able to generate a brand-new, disconnected one.
+  const existingPrepId = searchParams.get("prepId");
 
   const [record, setRecord] = useState<PrepRecord | null>(null);
+  const [checkingExistingPrep, setCheckingExistingPrep] = useState(!!existingPrepId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [jobDescriptionText, setJobDescriptionText] = useState("");
+  const [intelligence, setIntelligence] = useState<InterviewIntelligence | null>(null);
+
+  // Loads an already-generated report by id when one is linked in the URL.
+  // Fails safe, never guesses: an expired/invalid prepId just falls
+  // through to the normal "Generate a new report" screen below, exactly
+  // as if no prepId had been given at all — never a broken or blank page.
+  useEffect(() => {
+    if (!existingPrepId) return;
+
+    fetch(`/api/ai/interview-prep/${existingPrepId}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data) setRecord(data);
+      })
+      .catch(() => undefined)
+      .finally(() => setCheckingExistingPrep(false));
+  }, [existingPrepId]);
+
+  // Phase 17 Milestone 3 — fetched once the report exists, from the new
+  // read-only, deterministic, zero-LLM coverage endpoint. Failure here
+  // never blocks the rest of the page — PrepOverview renders fine
+  // without it (intelligence stays null), just without the new
+  // Coverage/Preparation Plan sections.
+  useEffect(() => {
+    if (!record) {
+      setIntelligence(null);
+      return;
+    }
+
+    fetch(`/api/ai/interview-prep/${record.prepId}/coverage`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then(setIntelligence)
+      .catch(() => setIntelligence(null));
+  }, [record]);
 
   async function handleGenerate() {
-    if (!resumeId || !jdMatchId) return;
+    if (!resumeVersionId && (!resumeId || !jdMatchId)) return;
 
     setLoading(true);
     setError(null);
 
     try {
+      const body = resumeVersionId
+        ? { resumeVersionId, jobDescriptionText: jobDescriptionText.trim() || undefined }
+        : { resumeId, jdMatchId };
+
       const response = await fetch("/api/ai/interview-prep", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resumeId, jdMatchId }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -52,7 +102,7 @@ function InterviewPreparationContent() {
     }
   }
 
-  if (!resumeId || !jdMatchId) {
+  if (!resumeVersionId && (!resumeId || !jdMatchId)) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <p className="text-lg font-semibold text-slate-900">Upload a resume and match it against a job first</p>
@@ -70,6 +120,14 @@ function InterviewPreparationContent() {
     );
   }
 
+  if (checkingExistingPrep) {
+    return (
+      <div role="status" className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">
+        Loading your interview preparation report...
+      </div>
+    );
+  }
+
   if (!record) {
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -78,6 +136,21 @@ function InterviewPreparationContent() {
           Personalized technical, HR, project, and system-design questions with ideal answers, a readiness score,
           a weakness analysis, a learning roadmap, and a cheat sheet.
         </p>
+        {resumeVersionId && (
+          <div className="mx-auto mt-4 max-w-md text-left">
+            <label className="mb-1 block text-xs font-semibold text-slate-500" htmlFor="prep-jd-text">
+              Job description (only needed if this resume version doesn&apos;t already have one attached)
+            </label>
+            <textarea
+              id="prep-jd-text"
+              value={jobDescriptionText}
+              onChange={(e) => setJobDescriptionText(e.target.value)}
+              rows={4}
+              placeholder="Paste a job description here if this version isn't already JD-optimized..."
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500"
+            />
+          </div>
+        )}
         <button
           onClick={handleGenerate}
           disabled={loading}
@@ -86,7 +159,7 @@ function InterviewPreparationContent() {
           {loading ? "Preparing..." : "Generate Interview Preparation"}
         </button>
         {error && (
-          <div className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div role="alert" className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {error}
           </div>
         )}
@@ -97,7 +170,25 @@ function InterviewPreparationContent() {
   const { report } = record;
 
   const tabs: TabItem[] = [
-    { id: "overview", label: "Overview", content: <PrepOverview report={report} /> },
+    { id: "overview", label: "Overview", content: <PrepOverview report={report} intelligence={intelligence} /> },
+    ...(intelligence
+      ? [
+          {
+            id: "practice",
+            label: "Practice",
+            content: (
+              <PrepPracticeTab
+                report={report}
+                questions={intelligence.questions}
+                studyPlan={intelligence.studyPlan}
+                resumeId={record.resumeId}
+                jdMatchId={record.jdMatchId}
+                prepId={record.prepId}
+              />
+            ),
+          },
+        ]
+      : []),
     { id: "technical", label: "Technical", content: <PrepTechnicalQuestions report={report} /> },
     { id: "hr", label: "HR", content: <PrepHrQuestions report={report} /> },
     { id: "projects", label: "Projects", content: <PrepProjectQuestions report={report} /> },
@@ -115,8 +206,10 @@ function InterviewPreparationContent() {
           Readiness score: <span className="text-blue-600">{report.readinessScore.overall}/100</span>
         </p>
         <div className="flex flex-wrap gap-2">
+          {/* Phase 17 Milestone 2 — uses the PrepRecord's own resumeId/jdMatchId (always the ephemeral ids the report was actually generated from), not the page's raw query params, so this link is correct regardless of whether this session started from an upload or a Resume Version. */}
           <Link
-            href={`/mock-interview?resumeId=${resumeId}&jdMatchId=${jdMatchId}&prepId=${record.prepId}`}
+            href={`/mock-interview?resumeId=${record.resumeId}&jdMatchId=${record.jdMatchId}&prepId=${record.prepId}`}
+            aria-label="Start Mock Interview"
             className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             Start Mock Interview
@@ -125,6 +218,7 @@ function InterviewPreparationContent() {
             <a
               key={format}
               href={`/api/ai/interview-prep/${record.prepId}/export?format=${format}`}
+              aria-label={`Export interview preparation report as ${format === "markdown" ? "Markdown" : format.toUpperCase()}`}
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               {format === "markdown" ? "Markdown" : format.toUpperCase()}

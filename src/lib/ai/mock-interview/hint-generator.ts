@@ -1,5 +1,6 @@
 import { openai } from "../openai";
 import { JobDescription } from "../job-description/jd-schema";
+import { delimitedDataBlock } from "../prompt-security";
 import { Resume } from "../resume/resume-schema";
 import { SessionQuestion } from "./session-schema";
 
@@ -10,7 +11,13 @@ const HINT_MODEL = "gpt-4o-mini";
 // structured-output schema needed for a one-line nudge — and deliberately
 // never states the answer itself.
 
-function buildHintMessages(question: SessionQuestion, resume: Resume, jd: JobDescription) {
+// Phase 17 Milestone 1, §5 — resume/JD content wrapped in the existing
+// delimitedDataBlock() helper, matching 20+ other generative call sites
+// in this codebase. No model/behavior change beyond the boundary itself.
+export function buildHintMessages(question: SessionQuestion, resume: Resume, jd: JobDescription) {
+  const resumeBlock = delimitedDataBlock("RESUME DATA", `Candidate skills: ${[...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"}.`);
+  const jdBlock = delimitedDataBlock("JOB DESCRIPTION DATA", `${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}.`);
+
   return [
     {
       role: "system" as const,
@@ -25,8 +32,9 @@ allowed, but a hint should still make the candidate do the work.`,
       role: "user" as const,
       content: `Question (${question.type}, topic: ${question.topic}): ${question.text}
 
-Candidate skills: ${[...resume.skills, ...resume.technicalSkills].join(", ") || "unknown"}.
-Target role: ${jd.jobTitle ?? "this role"}${jd.companyName ? ` at ${jd.companyName}` : ""}.`,
+${resumeBlock}
+
+${jdBlock}`,
     },
   ];
 }

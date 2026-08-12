@@ -52,14 +52,19 @@ export async function POST(req: Request) {
             recruitmentMode === true ? recruitmentRequestContext.run({ active: true }, askQuestion) : askQuestion();
 
         // Optional: when the Recruiter Workspace chat panel is active,
-        // resume-tool picks it up via this request-scoped context
-        // (the workspace is a true singleton, so this carries a boolean
-        // flag rather than an ID like every other context here) to drive
-        // "who is the strongest Java candidate", "compare X and Y",
-        // "recommend top 5 candidates" style requests. Existing callers
-        // that never send recruiterMode are unaffected.
+        // resume-tool picks it up via this request-scoped context to
+        // drive "who is the strongest Java candidate", "compare X and
+        // Y", "recommend top 5 candidates" style requests. Phase 16
+        // Milestone 2 — recruiterId comes from authUser below (the
+        // same server-derived Supabase session already resolved for
+        // withAuthContext, never trusted from the client); a client
+        // can only request recruiter mode, not whose workspace it
+        // targets. Existing callers that never send recruiterMode are
+        // unaffected.
         const withRecruiterContext = () =>
-            recruiterMode === true ? recruiterRequestContext.run({ active: true }, withRecruitmentContext) : withRecruitmentContext();
+            recruiterMode === true
+                ? recruiterRequestContext.run({ active: true, recruiterId: authUser?.id ?? null }, withRecruitmentContext)
+                : withRecruitmentContext();
 
         // Optional: when a LinkedIn optimizer session is active, resume-tool
         // picks it up via this request-scoped context to drive "optimize

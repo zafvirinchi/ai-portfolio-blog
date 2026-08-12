@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { candidateService } from "@/lib/ai/recruiter/candidate-service";
+import { handleRecruiterRouteError } from "@/lib/ai/recruiter/recruiter-route-helpers";
+import { requireRecruiterId } from "@/lib/ai/recruiter/recruiter-auth";
 
 export const maxDuration = 30;
 
@@ -12,12 +14,11 @@ export async function POST(_req: Request, { params }: Params) {
   const { candidateId } = await params;
 
   try {
-    const record = await candidateService.generateInsights(candidateId);
+    const recruiterId = await requireRecruiterId();
+    const record = await candidateService.generateInsights(candidateId, recruiterId);
 
     return NextResponse.json(record);
   } catch (error) {
-    console.error("[recruiter] Insights route failed", error);
-
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Insights generation failed" }, { status: 422 });
+    return handleRecruiterRouteError(error, "Insights generation failed");
   }
 }

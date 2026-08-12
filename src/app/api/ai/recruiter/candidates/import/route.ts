@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { candidateService } from "@/lib/ai/recruiter/candidate-service";
+import { handleRecruiterRouteError } from "@/lib/ai/recruiter/recruiter-route-helpers";
+import { requireRecruiterId } from "@/lib/ai/recruiter/recruiter-auth";
 import * as activityService from "@/lib/saas/activity-service";
 
 // Each imported file costs a full resumeService.analyzeUpload() call
@@ -13,6 +15,7 @@ export const maxDuration = 120;
 
 export async function POST(req: Request) {
   try {
+    const recruiterId = await requireRecruiterId();
     const formData = await req.formData();
     const fileEntries = formData.getAll("files").filter((entry): entry is File => entry instanceof File);
 
@@ -20,8 +23,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "At least one resume file is required" }, { status: 400 });
     }
 
+    const jobIdField = formData.get("jobId");
+    const jobId = typeof jobIdField === "string" && jobIdField ? jobIdField : null;
+
     const files = await Promise.all(fileEntries.map((file) => fromWebFile(file)));
-    const result = await candidateService.importResumes(files);
+    const result = await candidateService.importResumes(recruiterId, files, jobId);
 
     for (const candidate of result.imported) {
       await activityService.record("Candidate Added", `Imported candidate: ${candidate.name}`, {
@@ -31,8 +37,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[recruiter] Candidate import route failed", error);
-
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Candidate import failed" }, { status: 422 });
+    return handleRecruiterRouteError(error, "Candidate import failed");
   }
 }

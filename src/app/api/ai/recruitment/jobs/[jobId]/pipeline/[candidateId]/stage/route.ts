@@ -24,7 +24,7 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     const resolvedRole = ACTING_ROLES.includes(actingRole) ? actingRole : null;
-    const updated = pipelineService.changeStage(pipelineCandidate.pipelineCandidateId, stage, resolvedRole);
+    const updated = await pipelineService.changeStage(pipelineCandidate.pipelineCandidateId, stage, resolvedRole);
 
     return NextResponse.json(updated);
   } catch (error) {

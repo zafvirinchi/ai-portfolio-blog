@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { knowledgeIngestionService } from "@/lib/ai/ingestion/pipeline";
@@ -41,6 +42,9 @@ async function fetchChunkCounts(documentIds: string[]): Promise<Map<string, numb
 }
 
 export async function GET(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");
@@ -127,6 +131,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file");
@@ -172,6 +179,9 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

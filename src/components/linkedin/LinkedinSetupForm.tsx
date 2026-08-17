@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { LinkedinRecord } from "@/lib/ai/linkedin/linkedin-types";
 
 const PROFILE_VARIANT_PRESETS = [
@@ -40,10 +42,12 @@ export default function LinkedinSetupForm({ resumeId, rewriteId, jdMatchId, onSt
   const [licenses, setLicenses] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   async function handleStart() {
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch("/api/ai/linkedin", {
@@ -67,6 +71,11 @@ export default function LinkedinSetupForm({ resumeId, rewriteId, jdMatchId, onSt
       const data = await response.json();
 
       if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Failed to start LinkedIn optimizer");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
         throw new Error(data.error || "Failed to start LinkedIn optimizer");
       }
 
@@ -196,7 +205,24 @@ export default function LinkedinSetupForm({ resumeId, rewriteId, jdMatchId, onSt
         {loading ? "Starting..." : "Start LinkedIn Optimizer"}
       </button>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {entitlementError && (
+        <UpgradePrompt
+          featureLabel="LinkedIn Optimizer"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+          onRetry={handleStart}
+        />
+      )}
+
+      {error && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

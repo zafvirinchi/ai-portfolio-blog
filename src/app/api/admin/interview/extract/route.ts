@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { interviewDocumentService } from "@/lib/ai/interview-document";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 
 // Parses the PDF, reformats/generates answers via OpenAI (one call per
 // question), and extracts+uploads diagrams — comfortably exceeds Vercel's
@@ -15,6 +16,9 @@ export const maxDuration = 60;
 // for Admin Review. Confirming the import is a separate step
 // (confirm-import/route.ts), once an admin has edited/approved questions.
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file");

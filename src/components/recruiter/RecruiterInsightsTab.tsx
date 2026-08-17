@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { CandidateInsights } from "@/lib/ai/recruiter/candidate-schema";
 import type { CandidateSummary } from "@/lib/ai/recruiter/candidate-types";
 
@@ -28,6 +30,7 @@ export default function RecruiterInsightsTab({ candidates }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [insights, setInsights] = useState<CandidateInsights | null>(null);
 
   async function handleGenerate() {
@@ -35,12 +38,20 @@ export default function RecruiterInsightsTab({ candidates }: Props) {
 
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch(`/api/ai/recruiter/candidates/${selectedId}/insights`, { method: "POST" });
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Insights generation failed");
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Insights generation failed");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Insights generation failed");
+      }
 
       setInsights(data.insights);
     } catch (err) {
@@ -78,7 +89,20 @@ export default function RecruiterInsightsTab({ candidates }: Props) {
         </button>
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {entitlementError && (
+        <UpgradePrompt
+          featureLabel="Candidate Insights"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+          onRetry={handleGenerate}
+        />
+      )}
+
+      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       {insights && (
         <div className="space-y-4">

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // supabase-server.ts imports next/headers (cookies()), which doesn't
 // resolve outside a real Next.js request — mocked the same way
 // analytics/customer-analytics-service.test.ts already does.
-const mockUser = { current: null as { id: string } | null };
+const mockUser = { current: null as { id: string; email?: string } | null };
 vi.mock("../supabase-server", () => ({
   createSupabaseServerClient: vi.fn(async () => ({
     auth: { getUser: vi.fn(async () => ({ data: { user: mockUser.current } })) },
@@ -16,7 +16,7 @@ vi.mock("../supabase/admin", () => ({
   supabaseAdmin: { auth: { admin: { getUserById: (...args: unknown[]) => getUserByIdMock(...args), updateUserById: (...args: unknown[]) => updateUserByIdMock(...args) } } },
 }));
 
-import { getOptionalUserId, isAdmin, isRecruiter, resolvePlatformRoles, setPlatformRoles } from "./persona-service";
+import { AdminAccessRequiredError, getOptionalUserId, isAdmin, isRecruiter, PlatformUnauthorizedError, requirePlatformAdmin, requireUserId, resolvePlatformRoles, setPlatformRoles } from "./persona-service";
 
 // Phase 18 Milestone 1 — roles live in Supabase Auth's own app_metadata,
 // never a new table (see this file's own header comment) — these tests
@@ -86,5 +86,50 @@ describe("getOptionalUserId — the no-op-when-anonymous precedent (mirrors cred
   it("returns the real userId when a session exists", async () => {
     mockUser.current = { id: "u1" };
     expect(await getOptionalUserId()).toBe("u1");
+  });
+});
+
+describe("requireUserId — Phase 18 M2/M3, a package-appropriate message (not resume-version-auth.ts's own hardcoded wording)", () => {
+  it("throws PlatformUnauthorizedError, with a generic (not context-mismatched) message, when there is no session", async () => {
+    mockUser.current = null;
+    await expect(requireUserId()).rejects.toBeInstanceOf(PlatformUnauthorizedError);
+    // Generic on purpose (M3 finding): this same error now fires for
+    // both billing routes AND /admin/platform/* routes — a message
+    // mentioning "billing" specifically would be wrong for the latter,
+    // exactly the class of bug M2's own live-probing already caught once.
+    await expect(requireUserId()).rejects.toThrow(/signed in/i);
+  });
+
+  it("returns the real userId and email from the session, never from anything client-supplied", async () => {
+    mockUser.current = { id: "u1", email: "u1@example.com" };
+    expect(await requireUserId()).toEqual({ userId: "u1", email: "u1@example.com" });
+  });
+
+  it("returns a null email when the session has none, never a fabricated placeholder", async () => {
+    mockUser.current = { id: "u1" };
+    expect(await requireUserId()).toEqual({ userId: "u1", email: null });
+  });
+});
+
+describe("requirePlatformAdmin — Phase 18 M3, Scope H #1/#2 (the one gate every admin route/service function relies on)", () => {
+  it("rejects with PlatformUnauthorizedError (401) when there's no session at all — never reaches the role check", async () => {
+    mockUser.current = null;
+    await expect(requirePlatformAdmin()).rejects.toBeInstanceOf(PlatformUnauthorizedError);
+    expect(getUserByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects with AdminAccessRequiredError (403) for a real, authenticated NON-admin user", async () => {
+    mockUser.current = { id: "u1" };
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER", "RECRUITER"] } } }, error: null });
+
+    await expect(requirePlatformAdmin()).rejects.toBeInstanceOf(AdminAccessRequiredError);
+  });
+
+  it("resolves for a real ADMIN, re-deriving the role from app_metadata on every call — never cached, never trusted from anywhere else", async () => {
+    mockUser.current = { id: "admin1", email: "admin@example.com" };
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["ADMIN"] } } }, error: null });
+
+    await expect(requirePlatformAdmin()).resolves.toEqual({ userId: "admin1", email: "admin@example.com" });
+    expect(getUserByIdMock).toHaveBeenCalledWith("admin1");
   });
 });

@@ -2,9 +2,13 @@
 
 import { FormEvent, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+
 type Message = {
   role: "user" | "assistant";
   content: string;
+  /** Set only when this turn was rejected by the entitlement system (entitlement-response.ts's EntitlementErrorCode) — renders UpgradePrompt instead of a plain text bubble. */
+  entitlement?: { code: "FEATURE_NOT_INCLUDED" | "QUOTA_EXCEEDED"; limit?: number | null; used?: number | null; period?: string | null };
 };
 
 type ChatBoxProps = {
@@ -97,11 +101,18 @@ export default function ChatBox({
 
       const data = await response.json();
 
+      // Phase 18 Milestone 5 — resume.ai_assistant is gated server-side
+      // (requireFeature() in /api/ai/chat); a rejection carries the
+      // standardized entitlement-response.ts shape ({ code, ... }),
+      // rendered below as UpgradePrompt instead of a plain error bubble.
+      const entitlement = data.code === "FEATURE_NOT_INCLUDED" || data.code === "QUOTA_EXCEEDED" ? { code: data.code, limit: data.limit ?? null, used: data.used ?? null, period: data.period ?? null } : undefined;
+
       setMessages([
         ...updatedMessages,
         {
           role: "assistant",
           content: data.answer || data.error || "Something went wrong.",
+          ...(entitlement ? { entitlement } : {}),
         },
       ]);
     } catch (error) {
@@ -165,10 +176,30 @@ export default function ChatBox({
             className={
               message.role === "user"
                 ? "ml-auto max-w-[78%] rounded-2xl rounded-tr-sm bg-blue-600 px-5 py-3 text-white shadow-sm"
-                : "mr-auto max-w-[78%] rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-5 py-4 text-slate-800 shadow-sm"
+                : "mr-auto max-w-[85%] space-y-3"
             }
           >
-            <p className="whitespace-pre-line leading-7">{message.content}</p>
+            {message.role === "assistant" && message.entitlement ? (
+              <UpgradePrompt
+                featureLabel="AI Assistant"
+                code={message.entitlement.code}
+                featureId="resume.ai_assistant"
+                message={message.content}
+                limit={message.entitlement.limit}
+                used={message.entitlement.used}
+                period={message.entitlement.period}
+              />
+            ) : (
+              <div
+                className={
+                  message.role === "user"
+                    ? ""
+                    : "rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-5 py-4 text-slate-800 shadow-sm"
+                }
+              >
+                <p className="whitespace-pre-line leading-7">{message.content}</p>
+              </div>
+            )}
           </div>
         ))}
 

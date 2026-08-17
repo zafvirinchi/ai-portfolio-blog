@@ -68,3 +68,29 @@ export async function list(organizationId: string, limit = 50): Promise<AuditLog
 
   return data ?? [];
 }
+
+/**
+ * Phase 18 Milestone 3 — a generic, object-scoped read, for callers
+ * that log against organization_id: null (audit_logs.organization_id
+ * has always been nullable — see this table's own migration). Used by
+ * the new platform (individual-user) admin control plane to show a
+ * given user's own admin-action history, without needing an
+ * organization at all. Not platform-specific in name or implementation:
+ * any future non-organization-scoped feature can reuse this the same
+ * way, rather than each inventing its own audit_logs query.
+ */
+export async function listByObject(objectType: string, objectId: string, limit = 50): Promise<AuditLogEntry[]> {
+  const { data, error } = await supabaseAdmin
+    .from("audit_logs")
+    .select("*")
+    .eq("object_type", objectType)
+    .eq("object_id", objectId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? [];
+}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 type Params = {
@@ -8,6 +9,9 @@ type Params = {
 };
 
 export async function PUT(req: Request, { params }: Params) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { id } = await params;
     const body = await req.json();
@@ -56,6 +60,9 @@ export async function PUT(req: Request, { params }: Params) {
 }
 
 export async function DELETE(req: Request, { params }: Params) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { id } = await params;
 

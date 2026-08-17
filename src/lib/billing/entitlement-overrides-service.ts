@@ -43,6 +43,25 @@ export async function listActiveOverrides(userId: string): Promise<EntitlementOv
 }
 
 /**
+ * Phase 18 Milestone 3 — the FULL history for one user, including
+ * deactivated and expired rows, ordered newest-first: the admin control
+ * plane needs to show "what was granted/revoked and when", not just
+ * "what's currently in effect" (listActiveOverrides() above remains the
+ * one used by getEntitlement() itself, unchanged). Same fail-closed-to-
+ * empty-list behavior on a query error as every other read in this file.
+ */
+export async function listAllOverridesForUser(userId: string): Promise<EntitlementOverride[]> {
+  const { data, error } = await supabaseAdmin.from(TABLE).select("*").eq("user_id", userId).order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(`${LOG_PREFIX} Override history lookup failed, treating as none`, error);
+    return [];
+  }
+
+  return (data ?? []) as EntitlementOverride[];
+}
+
+/**
  * Admin-only (enforced by every caller — entitlement-service.ts's
  * grantOverride()/revokeOverride() — via persona-service.ts's isAdmin(),
  * never by this function itself). grantedBy is always the ACTING
@@ -76,6 +95,18 @@ export async function createOverride(input: {
   console.log(`${LOG_PREFIX} Override Created`, { userId: input.userId, featureId: input.featureId, access: input.access });
 
   return data as EntitlementOverride;
+}
+
+/** Phase 18 Milestone 3 — lets the admin "deactivate an override" API resolve which user an overrideId belongs to (for the audit-log target and an ownership sanity check) without the caller having to already know it. */
+export async function getOverrideById(overrideId: string): Promise<EntitlementOverride | null> {
+  const { data, error } = await supabaseAdmin.from(TABLE).select("*").eq("id", overrideId).maybeSingle();
+
+  if (error) {
+    console.error(`${LOG_PREFIX} Override lookup by id failed`, error);
+    return null;
+  }
+
+  return (data as EntitlementOverride) ?? null;
 }
 
 export async function revokeOverride(overrideId: string): Promise<void> {

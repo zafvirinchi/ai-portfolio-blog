@@ -37,6 +37,7 @@ import { PLAN_KEYS, PlanKey, FeatureKey } from "../../billing/billing-schema";
 import * as billingInvoiceService from "../../billing/invoice-service";
 import { getBalance as getAiCreditBalance, getSummary as getUsageSummary } from "../usage/usage-service";
 import { UsageFeatureKey } from "../usage/usage-schema";
+import { requireFeature } from "../../billing/entitlement-service";
 import { ToolResponse, AITool } from "./types";
 import { RagToolResult } from "@/types/tool-result";
 
@@ -448,6 +449,16 @@ async function handleRecruiterMessage(question: string, recruiterId: string): Pr
         return `Tell me which two (or more) candidates to compare by name, e.g. "Compare Jane Doe and John Smith".`;
       }
 
+      // Phase 19 Milestone 5 — genuine bypass found and fixed: this tool
+      // path called candidateService.compare() (a real LLM call) with no
+      // entitlement check at all, while its dedicated sibling route
+      // (/api/ai/recruiter/compare) has always required this. Reuses
+      // the identical feature ID and gate — no new metering invented.
+      // A rejection is caught by this function's own try/catch below
+      // and surfaced as a friendly chat message, same as any other
+      // recruiter-tool failure.
+      await requireFeature(recruiterId, "recruiter.analytics");
+
       const matchedByName = await Promise.all(names.map((name) => candidateService.findByNameFragment(name, recruiterId)));
       const matched = matchedByName.map((candidates) => candidates[0]).filter((candidate): candidate is CandidateSummary => Boolean(candidate));
 
@@ -460,6 +471,10 @@ async function handleRecruiterMessage(question: string, recruiterId: string): Pr
     }
 
     if (/\brecommend\b.*\bcandidates?\b|\btop\s+\d+\s+candidates?\b/.test(lower)) {
+      // Phase 19 Milestone 5 — same finding/fix as compare() above,
+      // mirroring /api/ai/recruiter/recommend's own gate exactly.
+      await requireFeature(recruiterId, "recruiter.analytics");
+
       const topN = detectTopN(question);
       const result = await candidateService.recommendTopCandidates(recruiterId, topN);
       return `Top ${result.candidates.length} recommended candidates:\n\n${summarizeCandidates(result.candidates, topN)}\n\n${result.summary}`;

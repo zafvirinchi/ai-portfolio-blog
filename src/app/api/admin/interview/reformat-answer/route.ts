@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { reformatPreservedAnswer } from "@/lib/ai/interview-document";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 
 // Light-touch formatting cleanup for an admin-authored answer (manual
 // add/edit form) — same facts and wording, just restores paragraph breaks
@@ -10,6 +11,9 @@ import { reformatPreservedAnswer } from "@/lib/ai/interview-document";
 // presentation. Does not touch the database — the admin reviews the result
 // in the form before saving.
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { question, answer } = await req.json();
 

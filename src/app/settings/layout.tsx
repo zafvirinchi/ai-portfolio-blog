@@ -16,6 +16,12 @@ const NAV_ITEMS = [
   { href: "/settings/security", label: "Security" },
   { href: "/settings/sessions", label: "Sessions" },
   { href: "/settings/profile", label: "Profile" },
+  // Phase 18 Milestone 2 — account-level, individual-user Stripe billing
+  // (Job Seeker / Recruiter plans) — distinct from the header's own
+  // "Billing" link above, which is the existing organization/team
+  // billing area (/billing). Labeled "My Billing" specifically to avoid
+  // the two being confused for the same feature.
+  { href: "/settings/billing", label: "My Billing" },
 ];
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {

@@ -2,7 +2,20 @@
 
 import { ChangeEvent, DragEvent, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { JobParseResult } from "@/lib/ai/job/job-types";
+
+/** Carries the parsed JSON error body through XMLHttpRequest's reject path (a plain Error loses everything but .message) so the caller can still distinguish an entitlement rejection from any other failure. */
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public body: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt,.md";
 
@@ -36,7 +49,7 @@ function uploadWithProgress(file: File, onProgress: (percent: number) => void): 
       if (xhr.status >= 200 && xhr.status < 300 && parsed) {
         resolve(parsed);
       } else {
-        reject(new Error(parsed?.error || "Job description parsing failed"));
+        reject(new ApiError(parsed?.error || "Job description parsing failed", parsed));
       }
     });
 
@@ -52,11 +65,13 @@ export default function JobUpload({ onParsed }: Props) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
 
   async function handleFile(file: File) {
     setFilename(file.name);
     setError(null);
+    setEntitlementError(null);
     setUploading(true);
     setProgress(0);
 
@@ -64,7 +79,12 @@ export default function JobUpload({ onParsed }: Props) {
       const result = await uploadWithProgress(file, setProgress);
       onParsed(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Job description parsing failed.");
+      const entitlement = err instanceof ApiError ? readEntitlementError(err.body, err.message) : null;
+      if (entitlement) {
+        setEntitlementError(entitlement);
+      } else {
+        setError(err instanceof Error ? err.message : "Job description parsing failed.");
+      }
     } finally {
       setUploading(false);
     }
@@ -129,8 +149,19 @@ export default function JobUpload({ onParsed }: Props) {
         )}
       </label>
 
-      {error && (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      {entitlementError ? (
+        <UpgradePrompt
+          className="mt-4"
+          featureLabel="Job Description Analyzer"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+        />
+      ) : (
+        error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
     </div>
   );

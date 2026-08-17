@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const body = await req.json();
 

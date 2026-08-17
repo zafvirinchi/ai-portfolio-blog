@@ -91,3 +91,77 @@ export async function getOptionalUserId(): Promise<string | null> {
 
   return user?.id ?? null;
 }
+
+/**
+ * Phase 18 Milestone 2 — a REQUIRED variant for routes that genuinely
+ * need a signed-in user, with a message appropriate to this package.
+ * Deliberately NOT reusing resume-versions/resume-version-auth.ts's own
+ * UnauthorizedError here — that class's message is hardcoded to
+ * resume-version wording ("...to manage resume versions"), which
+ * live-probing this milestone's own routes surfaced as genuinely
+ * misleading in a billing context. A distinct error class per package
+ * with its own accurate message, both mapped to the same 401, is the
+ * correct fix — not a shared class with the wrong words.
+ *
+ * Phase 18 Milestone 3 — the message below was originally "...to manage
+ * your billing", written when this class was only used by the checkout/
+ * portal/overview routes. Now that requirePlatformAdmin() (this file)
+ * also throws it for every /admin/platform/* route on the "no session
+ * at all" path, live-probing surfaced the SAME class of context
+ * mismatch again — "manage your billing" makes no sense for "search
+ * users". Generalized to cover both truthfully, rather than forking a
+ * second near-identical error class per sub-area.
+ */
+export class PlatformUnauthorizedError extends Error {
+  constructor() {
+    super("You must be signed in to access this.");
+    this.name = "PlatformUnauthorizedError";
+  }
+}
+
+export async function requireUserId(): Promise<{ userId: string; email: string | null }> {
+  const supabase = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    throw new PlatformUnauthorizedError();
+  }
+
+  return { userId: user.id, email: user.email ?? null };
+}
+
+/**
+ * Phase 18 Milestone 3 — thrown when a real, authenticated session
+ * exists but doesn't resolve as ADMIN. Kept distinct from
+ * PlatformUnauthorizedError (401 — no session at all) so every admin
+ * route can map the two to the correct 401 vs 403 (Step: "return safe
+ * 401/403 responses without leaking protected data").
+ */
+export class AdminAccessRequiredError extends Error {
+  constructor() {
+    super("This action requires administrator access.");
+    this.name = "AdminAccessRequiredError";
+  }
+}
+
+/**
+ * THE one place every admin-only platform route in this milestone
+ * resolves "is this a real admin, and who are they" — never trusts a
+ * client-supplied userId as proof of anything (Security requirement):
+ * the acting user is always the real Supabase session
+ * (requireUserId()), and their ADMIN status is always re-derived from
+ * app_metadata via resolvePlatformRoles() on every call, never cached,
+ * never accepted as a client claim.
+ */
+export async function requirePlatformAdmin(): Promise<{ userId: string; email: string | null }> {
+  const { userId, email } = await requireUserId();
+  const roles = await resolvePlatformRoles(userId);
+
+  if (!isAdmin(roles)) {
+    throw new AdminAccessRequiredError();
+  }
+
+  return { userId, email };
+}

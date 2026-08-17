@@ -26,6 +26,10 @@ const navItems = [
   { href: "/admin/billing", label: "Billing" },
   { href: "/admin/usage", label: "AI Usage" },
   { href: "/admin/analytics", label: "Analytics" },
+
+  // Phase 18 Milestone 3 — individual-user platform roles/entitlements/
+  // billing, distinct from the organization-scoped "Billing" above.
+  { href: "/admin/platform/users", label: "Platform Users" },
 ];
 
 export default function AdminSidebar() {

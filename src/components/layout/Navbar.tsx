@@ -1,6 +1,16 @@
 import Link from "next/link";
 import Logo from "./Logo";
 
+// Phase 19 Milestone 1, Step 9 — audit finding: /recruiter (the entire
+// Recruiter workspace) and /settings/billing had no link anywhere in
+// primary navigation — /recruiter was only reachable by typing the URL,
+// and /settings/billing was only ever reached reactively, after an
+// UpgradePrompt rejection (never proactively, to just check a plan or
+// usage). Both destinations already redirect an unauthenticated visitor
+// to /login on their own (unchanged, existing behavior) — adding a
+// static link here is safe regardless of session state, exactly like
+// the existing Resume Analyzer/Job Match links, which are equally
+// reachable by anonymous visitors.
 const links = [
   { href: "/", label: "Home" },
   { href: "/blog", label: "Blog" },
@@ -9,6 +19,8 @@ const links = [
   { href: "/ai", label: "AI Assistant" },
   { href: "/resume-analyzer", label: "Resume Analyzer" },
   { href: "/job-match", label: "Job Match" },
+  { href: "/recruiter", label: "Recruiter" },
+  { href: "/settings/billing", label: "Billing" },
   { href: "/contact", label: "Contact" },
 ];
 

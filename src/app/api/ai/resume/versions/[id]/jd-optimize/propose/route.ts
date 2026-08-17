@@ -8,6 +8,8 @@ import { OPTIMIZATION_MODES, OptimizerOutput } from "@/lib/ai/job-description/jd
 import { classifyCertificationRequirements, classifyEducationRequirements } from "@/lib/ai/job-description/keyword-engine";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -36,6 +38,19 @@ export async function POST(req: Request, { params }: Params) {
     const body = proposeSchema.parse(await req.json());
 
     await checkCredits("jd_match");
+
+    // Phase 19 Milestone 3 — genuine bypass found and fixed: this route
+    // runs the exact same computeJdMatchForResume() pipeline (2 LLM
+    // calls) as /api/ai/resume/jd-match, which has required this same
+    // JD_MATCHES quota since Phase 18 M5 — but this route only ever had
+    // the org-scoped checkCredits() above (a no-op for an individual
+    // user with no organization), so a Free-tier user could run
+    // unlimited JD analyses here despite being capped at 5/month
+    // through the other route. requireUserId() above already guarantees
+    // a real session on every call — no anonymous-preservation branch
+    // is needed here, unlike the ephemeral tool's additive pattern.
+    await requireQuota(userId, "JD_MATCHES");
+
     const startedAt = Date.now();
 
     const version = await resumeVersionService.getVersion(userId, id);
@@ -46,6 +61,7 @@ export async function POST(req: Request, { params }: Params) {
     );
 
     await consumeCredits("jd_match", Date.now() - startedAt);
+    await recordUsage(userId, "JD_MATCHES");
 
     const gapSkills = gapSkillsFor(matchResult.missingSkills, matchResult.partialSkills);
     const optimizerOutput: OptimizerOutput = {
@@ -108,6 +124,9 @@ export async function POST(req: Request, { params }: Params) {
       summary,
     });
   } catch (error) {
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
+
     if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
       return NextResponse.json({ error: error.message }, { status: 402 });
     }

@@ -4,6 +4,9 @@ import { computeJdMatch } from "@/lib/ai/job-description/jd-matcher";
 import { jdMatchService } from "@/lib/ai/job-description/jd-service";
 import { ephemeralResumeOptimizer } from "@/lib/ai/job-description/resume-optimizer";
 import { resumeService } from "@/lib/ai/resume/resume-service";
+import { requireFeature } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 
 // One OpenAI structured-output call — same budget as the other JD-match
 // routes. Lazily triggered by the UI (only when the Resume Optimizer tab
@@ -39,6 +42,12 @@ export async function POST(_req: Request, { params }: Params) {
       );
     }
 
+    // Phase 18 Milestone 5 — additive, no-op for anonymous callers.
+    // resume.optimize has no metric (NONE on Free, UNLIMITED on
+    // Pro/Premium) — a boolean feature gate, not a quota.
+    const platformUserId = await getOptionalUserId();
+    if (platformUserId) await requireFeature(platformUserId, "resume.optimize");
+
     // Deterministic, no-LLM recomputation of the same match data
     // jdMatchService.analyze() already computed once — cheap, and avoids
     // needing to modify jd-service.ts just to retain the intermediate
@@ -51,6 +60,9 @@ export async function POST(_req: Request, { params }: Params) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("[resume-optimizer] API route failed", error);
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Resume optimization failed" },

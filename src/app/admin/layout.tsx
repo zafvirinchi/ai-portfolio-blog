@@ -2,8 +2,22 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import LogoutButton from "@/components/admin/LogoutButton";
+import { isAdmin, resolvePlatformRoles } from "@/lib/billing/persona-service";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
+// Phase 18 Milestone 4, Step 2 — this used to only check that a session
+// existed (no role check at all), documented as a gap in Phase 17 M7
+// and left unfixed through Phase 18 M1/M3 on purpose: fixing it without
+// a working bootstrap path would have locked the site owner out of the
+// entire CMS, since no user has ever held the ADMIN persona before this
+// milestone (see PHASE18_MILESTONE4's own report for the bootstrap
+// mechanism this fix depends on). The whole /admin/** tree — blogs,
+// interview content, RAG knowledge base, SaaS/billing/usage dashboards,
+// the M3 platform control plane — is a single site-owner-only surface;
+// nothing under it has ever had a distinct, less-privileged audience.
+// Reuses the same requirePlatformAdmin() building blocks
+// (resolvePlatformRoles/isAdmin) every /admin/platform/** route already
+// uses (Phase 18 M3) — no second role-resolution implementation.
 export default async function AdminLayout({
   children,
 }: {
@@ -17,6 +31,24 @@ export default async function AdminLayout({
 
   if (!user) {
     redirect("/admin/login");
+  }
+
+  const roles = await resolvePlatformRoles(user.id);
+
+  if (!isAdmin(roles)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
+        <div className="max-w-md rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+          <h1 className="text-xl font-bold text-red-900">Access Denied</h1>
+          <p className="mt-2 text-sm text-red-800">
+            This area requires administrator access. Your account ({user.email}) doesn&apos;t currently have it.
+          </p>
+          <Link href="/" className="mt-4 inline-block text-sm font-medium text-blue-600">
+            Return to the website
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

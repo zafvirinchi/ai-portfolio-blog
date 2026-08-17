@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/security-check.mjs"
+          },
+          {
+            "type": "command",
+            "command": "node .claude/hooks/code-quality-check.mjs"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/verification-check.mjs"
+          }
+        ]
+      }
+    ]
+  }
+}

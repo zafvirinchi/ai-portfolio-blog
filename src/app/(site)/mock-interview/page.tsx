@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 import ChatBox from "@/components/ai/ChatBox";
 import Tabs, { TabItem } from "@/components/ui/Tabs";
@@ -29,10 +29,13 @@ interface TurnResponse {
 const SUGGESTIONS = ["Skip this question", "Give me a harder question", "Explain the ideal answer", "End interview"];
 
 function MockInterviewContent() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const resumeId = searchParams.get("resumeId");
   const jdMatchId = searchParams.get("jdMatchId");
   const prepId = searchParams.get("prepId") ?? undefined;
+  const sessionIdParam = searchParams.get("sessionId");
 
   const [session, setSession] = useState<SessionRecord | null>(null);
   const [prompt, setPrompt] = useState<string | null>(null);
@@ -40,6 +43,18 @@ function MockInterviewContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTabId, setActiveTabId] = useState("setup");
+  // Phase 21 Milestone 1 — audit finding: an in-progress session's own id
+  // was never written to the URL, only ever held in this component's
+  // useState. A page refresh mid-interview silently reset the UI to the
+  // Setup tab even though the server-side session (in-memory, 2h TTL —
+  // see session-service.ts) was still alive, and the only way forward
+  // was clicking "Start" again — which re-invokes the requireQuota-gated
+  // creation route and burns a second MOCK_INTERVIEWS unit for work
+  // already in progress. Fixed by round-tripping sessionId through the
+  // URL (mirroring how resumeId/jdMatchId/prepId already do) and
+  // restoring from the existing GET /api/ai/mock-interview/[sessionId]
+  // route on mount when present.
+  const [restoringSession, setRestoringSession] = useState(!!sessionIdParam);
   // Phase 17 Milestone 6 — Tabs (ui/Tabs.tsx) is intentionally uncontrolled
   // and only reads `defaultTabId` once per mount; bumping this key forces a
   // fresh mount so the "View Latest Debrief" CTA (MockInterviewProgress)
@@ -60,7 +75,58 @@ function MockInterviewContent() {
     setPrompt(result.prompt);
     setLiveFeedback(result.liveFeedback);
     recordIfCompleted(result.session, result.completed);
+    setSessionUrlParam(result.session.sessionId);
   }
+
+  function setSessionUrlParam(sessionId: string | null) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (sessionId) {
+      params.set("sessionId", sessionId);
+    } else {
+      params.delete("sessionId");
+    }
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  // Restore an in-progress session from the URL on mount (refresh, or a
+  // returning visit within the server's 2h TTL) — the session record
+  // itself already carries enough state (questions/currentIndex/status)
+  // for MockInterviewQuestionPanel to render correctly with `prompt`
+  // left null (it already falls back to the session's current question
+  // text). If the id is stale/expired, drop it from the URL rather than
+  // retrying forever.
+  useEffect(() => {
+    if (!sessionIdParam || session) return;
+
+    let cancelled = false;
+
+    fetch(`/api/ai/mock-interview/${sessionIdParam}`)
+      .then(async (response) => {
+        if (cancelled) return;
+        if (!response.ok) {
+          setSessionUrlParam(null);
+          return;
+        }
+        const record: SessionRecord = await response.json();
+        setSession(record);
+        setActiveTabId(record.status === "completed" ? "debrief" : "interview");
+      })
+      .catch(() => {
+        if (!cancelled) setSessionUrlParam(null);
+      })
+      .finally(() => {
+        if (!cancelled) setRestoringSession(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally runs once per distinct sessionIdParam value only —
+    // re-running on every render (e.g. from `session` changing after a
+    // successful restore) would re-fetch pointlessly; the `session` guard
+    // above already prevents that without needing it in the dependency list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionIdParam]);
 
   // Phase 17 Milestone 7 — audit finding: ChatBox can drive this exact
   // session (skip/end/restart/etc, see interview.tool.ts) entirely outside
@@ -141,6 +207,15 @@ function MockInterviewContent() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (restoringSession) {
+    return (
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm" role="status">
+        <p className="text-lg font-semibold text-slate-900">Resuming your interview session...</p>
+        <p className="mt-2 text-sm text-slate-600">Reconnecting to your in-progress mock interview.</p>
+      </div>
+    );
   }
 
   if (!resumeId || !jdMatchId) {

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { CandidateSummary, DashboardSummary } from "@/lib/ai/recruiter/candidate-types";
 import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
 
@@ -34,6 +36,7 @@ export default function RecruiterDashboardTab({ dashboard, loadingDashboard, can
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importEntitlementError, setImportEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   const refreshJobs = useCallback(async () => {
     setLoadingJobs(true);
@@ -99,6 +102,7 @@ export default function RecruiterDashboardTab({ dashboard, loadingDashboard, can
 
     setImportLoading(true);
     setError(null);
+    setImportEntitlementError(null);
     setImportResult(null);
 
     try {
@@ -114,7 +118,14 @@ export default function RecruiterDashboardTab({ dashboard, loadingDashboard, can
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Import failed");
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Import failed");
+        if (entitlement) {
+          setImportEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Import failed");
+      }
 
       setImportResult(
         `Imported ${data.imported.length} candidate(s)${data.failed.length > 0 ? `, ${data.failed.length} failed (${data.failed.map((f: { filename: string }) => f.filename).join(", ")})` : ""}.`
@@ -254,6 +265,18 @@ export default function RecruiterDashboardTab({ dashboard, loadingDashboard, can
         />
         {importLoading && <p className="mt-2 text-sm text-slate-500">Importing...</p>}
         {importResult && <p className="mt-2 text-sm text-green-700">{importResult}</p>}
+        {importEntitlementError && (
+          <UpgradePrompt
+            className="mt-3"
+            featureLabel="Candidate Import"
+            code={importEntitlementError.code}
+          featureId={importEntitlementError.featureId}
+            message={importEntitlementError.message}
+            limit={importEntitlementError.limit}
+            used={importEntitlementError.used}
+            period={importEntitlementError.period}
+          />
+        )}
       </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}

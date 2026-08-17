@@ -3,6 +3,8 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import { INTERVIEW_TYPES, SESSION_MODES } from "@/lib/ai/mock-interview/session-schema";
 import type { InterviewType, SessionMode } from "@/lib/ai/mock-interview/session-schema";
 import type { SessionTurnResult } from "@/lib/ai/mock-interview/session-service";
@@ -30,10 +32,12 @@ export default function MockInterviewSetup({ resumeId, jdMatchId, prepId, hasSes
   const [mode, setMode] = useState<SessionMode>("practice");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   async function handleStart() {
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch("/api/ai/mock-interview", {
@@ -45,6 +49,11 @@ export default function MockInterviewSetup({ resumeId, jdMatchId, prepId, hasSes
       const data = await response.json();
 
       if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Failed to start mock interview");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
         throw new Error(data.error || "Failed to start mock interview");
       }
 
@@ -113,7 +122,19 @@ export default function MockInterviewSetup({ resumeId, jdMatchId, prepId, hasSes
         {loading ? "Starting..." : "Start Mock Interview"}
       </button>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+      {entitlementError ? (
+        <UpgradePrompt
+          featureLabel="Mock Interview"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+        />
+      ) : (
+        error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      )}
     </div>
   );
 }

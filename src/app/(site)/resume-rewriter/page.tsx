@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import ChatBox from "@/components/ai/ChatBox";
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
 import RewriteSectionCard from "@/components/resume-rewriter/RewriteSectionCard";
 import RewriteStylePicker from "@/components/resume-rewriter/RewriteStylePicker";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { RewriteSection, RewriteStyle } from "@/lib/ai/resume-rewriter/rewrite-schema";
 import type { RewriteRecord } from "@/lib/ai/resume-rewriter/rewrite-types";
 
@@ -31,6 +33,7 @@ function ResumeRewriterContent() {
   const [targetContext, setTargetContext] = useState("");
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   async function refresh(rewriteId: string) {
     const response = await fetch(`/api/ai/resume-rewriter/${rewriteId}`);
@@ -43,6 +46,7 @@ function ResumeRewriterContent() {
 
     setLoading("start");
     setError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch("/api/ai/resume-rewriter", {
@@ -52,7 +56,14 @@ function ResumeRewriterContent() {
       });
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Failed to start");
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Failed to start");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Failed to start");
+      }
       setRecord(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start.");
@@ -184,6 +195,20 @@ function ResumeRewriterContent() {
           >
             {loading === "start" ? "Starting..." : "Start Rewriting"}
           </button>
+          {entitlementError ? (
+            <UpgradePrompt
+              className="mx-auto mt-4 max-w-xl text-left"
+              featureLabel="Resume Rewriting"
+              code={entitlementError.code}
+          featureId={entitlementError.featureId}
+              message={entitlementError.message}
+              limit={entitlementError.limit}
+              used={entitlementError.used}
+              period={entitlementError.period}
+            />
+          ) : (
+            error && <div role="alert" className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+          )}
         </div>
       ) : (
         <>

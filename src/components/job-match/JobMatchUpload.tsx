@@ -2,7 +2,20 @@
 
 import { ChangeEvent, DragEvent, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { JobMatchResult } from "@/lib/ai/job-match/job-match-types";
+
+/** Carries the parsed JSON error body through XMLHttpRequest's reject path (a plain Error loses everything but .message) so the caller can still distinguish an entitlement rejection from any other failure. */
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public body: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 const ACCEPTED_RESUME_EXTENSIONS = ".pdf,.docx,.txt";
 const ACCEPTED_JD_EXTENSIONS = ".pdf,.docx,.txt,.md";
@@ -37,7 +50,7 @@ function submitWithProgress(
       if (xhr.status >= 200 && xhr.status < 300 && parsed) {
         resolve(parsed);
       } else {
-        reject(new Error(parsed?.error || "Job match analysis failed"));
+        reject(new ApiError(parsed?.error || "Job match analysis failed", parsed));
       }
     });
 
@@ -104,6 +117,7 @@ export default function JobMatchUpload({ onAnalyzed }: Props) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   const canSubmit = resumeFile !== null && (jdMode === "paste" ? jdText.trim().length > 0 : jdFile !== null);
 
@@ -111,6 +125,7 @@ export default function JobMatchUpload({ onAnalyzed }: Props) {
     if (!resumeFile || !canSubmit) return;
 
     setError(null);
+    setEntitlementError(null);
     setUploading(true);
     setProgress(0);
 
@@ -127,7 +142,12 @@ export default function JobMatchUpload({ onAnalyzed }: Props) {
       const result = await submitWithProgress(formData, setProgress);
       onAnalyzed(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Job match analysis failed.");
+      const entitlement = err instanceof ApiError ? readEntitlementError(err.body, err.message) : null;
+      if (entitlement) {
+        setEntitlementError(entitlement);
+      } else {
+        setError(err instanceof Error ? err.message : "Job match analysis failed.");
+      }
     } finally {
       setUploading(false);
     }
@@ -207,8 +227,18 @@ export default function JobMatchUpload({ onAnalyzed }: Props) {
         </div>
       )}
 
-      {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
+      {entitlementError ? (
+        <UpgradePrompt
+          featureLabel="Job Match"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+        />
+      ) : (
+        error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
       )}
     </div>
   );

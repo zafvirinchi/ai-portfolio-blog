@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 
 import ChatBox from "@/components/ai/ChatBox";
 import Tabs, { TabItem } from "@/components/ui/Tabs";
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
 import RecruiterAnalyticsTab from "@/components/recruiter/RecruiterAnalyticsTab";
 import RecruiterDashboardTab from "@/components/recruiter/RecruiterDashboardTab";
 import RecruiterCandidateTable from "@/components/recruiter/RecruiterCandidateTable";
 import RecruiterComparisonTab from "@/components/recruiter/RecruiterComparisonTab";
 import RecruiterInsightsTab from "@/components/recruiter/RecruiterInsightsTab";
 import RecruiterReportsTab from "@/components/recruiter/RecruiterReportsTab";
+import { EntitlementAwareError, EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { CandidateStatus } from "@/lib/ai/recruiter/candidate-schema";
 import type { CandidateFitLevel, CandidateSummary, DashboardSummary, RankedCandidate, TopCandidatesRecommendation } from "@/lib/ai/recruiter/candidate-types";
 import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
@@ -37,14 +39,25 @@ export default function RecruiterWorkspacePage() {
   const [ranking, setRanking] = useState<RankedCandidate[] | null>(null);
   const [recommendation, setRecommendation] = useState<TopCandidatesRecommendation | null>(null);
   const [recommendLoading, setRecommendLoading] = useState(false);
+  const [recommendEntitlementError, setRecommendEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [jobs, setJobs] = useState<RecruiterJobRecord[]>([]);
 
+  // Phase 21 Milestone 1 — audit finding: this function (and
+  // refreshDashboard/refreshRanking below) applied the response body to
+  // state unconditionally, unlike refreshJobs's own correct
+  // `if (response.ok)` guard. An unauthorized/expired-session visitor
+  // gets a 401 JSON error body ({error: "..."}) from these routes, which
+  // was being set directly as `candidates`/`dashboard`/`ranking` — then
+  // RecruiterCandidateTable's unconditional `candidates.filter(...)`
+  // threw "candidates.filter is not a function", crashing to Next.js's
+  // unstyled default error page (no error.tsx boundary exists in this
+  // app) instead of a real "please sign in" message.
   const refreshCandidates = useCallback(async () => {
     setLoadingCandidates(true);
     try {
       const response = await fetch("/api/ai/recruiter/candidates");
       const data = await response.json();
-      setCandidates(data);
+      if (response.ok) setCandidates(data);
     } finally {
       setLoadingCandidates(false);
     }
@@ -61,7 +74,7 @@ export default function RecruiterWorkspacePage() {
     try {
       const response = await fetch("/api/ai/recruiter/dashboard");
       const data = await response.json();
-      setDashboard(data);
+      if (response.ok) setDashboard(data);
     } finally {
       setLoadingDashboard(false);
     }
@@ -70,7 +83,7 @@ export default function RecruiterWorkspacePage() {
   const refreshRanking = useCallback(async () => {
     const response = await fetch("/api/ai/recruiter/ranking");
     const data = await response.json();
-    setRanking(data);
+    if (response.ok) setRanking(data);
   }, []);
 
   useEffect(() => {
@@ -112,12 +125,20 @@ export default function RecruiterWorkspacePage() {
       await refreshDashboard();
     } else {
       const data = await response.json().catch(() => ({}));
+      // Phase 19 M4, Step 5 — carries the entitlement shape through this
+      // throw so RecruiterCandidateTable's catch block (which only ever
+      // sees an Error, not the raw response) can still render
+      // UpgradePrompt instead of a plain string for a genuine
+      // FEATURE_NOT_INCLUDED/QUOTA_EXCEEDED/AUTH_REQUIRED rejection.
+      const entitlement = readEntitlementError(data, "Bulk status update failed.");
+      if (entitlement) throw new EntitlementAwareError(entitlement);
       throw new Error(data.error || "Bulk status update failed.");
     }
   }
 
   async function handleRecommend() {
     setRecommendLoading(true);
+    setRecommendEntitlementError(null);
     try {
       const response = await fetch("/api/ai/recruiter/recommend", {
         method: "POST",
@@ -125,7 +146,12 @@ export default function RecruiterWorkspacePage() {
         body: JSON.stringify({ topN: 5 }),
       });
       const data = await response.json();
-      if (response.ok) setRecommendation(data);
+      if (response.ok) {
+        setRecommendation(data);
+        return;
+      }
+      const entitlement = readEntitlementError(data, "Recommendation failed.");
+      if (entitlement) setRecommendEntitlementError(entitlement);
     } finally {
       setRecommendLoading(false);
     }
@@ -190,6 +216,20 @@ export default function RecruiterWorkspacePage() {
 
             {recommendation && (
               <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">{recommendation.summary}</div>
+            )}
+
+            {recommendEntitlementError && (
+              <UpgradePrompt
+                featureLabel="Top Candidate Recommendations"
+                code={recommendEntitlementError.code}
+                featureId={recommendEntitlementError.featureId}
+                message={recommendEntitlementError.message}
+                limit={recommendEntitlementError.limit}
+                used={recommendEntitlementError.used}
+                period={recommendEntitlementError.period}
+                onRetry={handleRecommend}
+                className="mt-4"
+              />
             )}
           </div>
 

@@ -4,6 +4,9 @@ import { prepService } from "@/lib/ai/interview-prep/prep-service";
 import { ResumeVersionMissingJdError, resolveInterviewPrepInputFromResumeVersion } from "@/lib/ai/interview-prep/resume-version-adapter";
 import { requireUserId, UnauthorizedError } from "@/lib/ai/resume-versions/resume-version-auth";
 import { ResumeVersionNotFoundError } from "@/lib/ai/resume-versions/resume-version-service";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -26,9 +29,17 @@ export async function POST(req: Request) {
 
     let resolvedResumeId: string;
     let resolvedJdMatchId: string;
+    let platformUserId: string | null;
 
     if (typeof resumeVersionId === "string" && resumeVersionId) {
       const userId = await requireUserId();
+      // Phase 19 Milestone 4, Step 15 — session-repetition audit finding:
+      // this branch previously ALSO called getOptionalUserId() below,
+      // an independent supabase.auth.getUser() call resolving the exact
+      // same session a second time. requireUserId() (resume-version-
+      // auth.ts) already proved a real session exists and returned its
+      // userId — reused directly for the entitlement check instead.
+      platformUserId = userId;
       const resolved = await resolveInterviewPrepInputFromResumeVersion(
         userId,
         resumeVersionId,
@@ -47,11 +58,20 @@ export async function POST(req: Request) {
 
       resolvedResumeId = resumeId;
       resolvedJdMatchId = jdMatchId;
+      // Phase 18 Milestone 5 — additive, no-op for anonymous callers
+      // (this {resumeId, jdMatchId} path stays fully unauthenticated, by
+      // design — see this file's top-level doc comment).
+      platformUserId = await getOptionalUserId();
     }
+
+    // Checked once regardless of which input path was taken, since both
+    // ultimately generate the same report.
+    if (platformUserId) await requireQuota(platformUserId, "INTERVIEW_PREPARATIONS");
 
     const record = await withUsageContext("INTERVIEW_GENERATION", "INTERVIEW_GENERATION", () =>
       prepService.generate({ resumeId: resolvedResumeId, jdMatchId: resolvedJdMatchId })
     );
+    if (platformUserId) await recordUsage(platformUserId, "INTERVIEW_PREPARATIONS");
 
     return NextResponse.json(record);
   } catch (error) {
@@ -70,6 +90,9 @@ export async function POST(req: Request) {
     }
 
     console.error("[interview-prep] API route failed", error);
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     if (error instanceof InsufficientAiCreditsError) {
       return NextResponse.json({ error: error.message }, { status: 402 });

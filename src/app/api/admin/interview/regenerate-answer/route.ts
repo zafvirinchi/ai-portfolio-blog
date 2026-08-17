@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { generateDocumentAnswer, formatGeneratedAnswer } from "@/lib/ai/interview-document";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 
 // On-demand, single-question AI generation for Admin Review's "Regenerate
 // Answer" / compare-with-original action. Does not touch the database and
@@ -8,6 +9,9 @@ import { generateDocumentAnswer, formatGeneratedAnswer } from "@/lib/ai/intervie
 // for the admin to compare against the original and choose Keep Original /
 // Keep AI / Merge Both.
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const { question, category, topic } = await req.json();
 

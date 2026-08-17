@@ -14,6 +14,8 @@ import {
 } from "@/lib/ai/resume-versions";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -62,11 +64,19 @@ export async function POST(req: Request, { params }: Params) {
     const body = applyJdOptimizationSchema.parse(await req.json());
 
     await checkCredits("jd_match");
+
+    // Phase 19 Milestone 3 — same genuine bypass, same fix as
+    // jd-optimize/propose/route.ts's own comment: this legacy route
+    // runs the identical JD-matching pipeline and previously had no
+    // platform quota check at all.
+    await requireQuota(userId, "JD_MATCHES");
+
     const startedAt = Date.now();
 
     const version = await withUsageContext("JD_MATCHING", "JD_ANALYSIS", () => resumeVersionService.applyJdOptimization(userId, id, body.jobDescriptionText));
 
     await consumeCredits("jd_match", Date.now() - startedAt);
+    await recordUsage(userId, "JD_MATCHES");
 
     const completedLog = buildLegacyOptimizeCompletedLog(Date.now() - startedAt);
     console.log(completedLog.message, completedLog.payload);
@@ -88,6 +98,9 @@ export async function POST(req: Request, { params }: Params) {
     if (error instanceof MasterResumeProtectedError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
       return NextResponse.json({ error: error.message }, { status: 402 });

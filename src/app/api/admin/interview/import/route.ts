@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { InterviewExtractionService } from "@/lib/ai/interview";
 import { interviewImportService } from "@/lib/ai/interview-import";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 
 // Legacy one-shot upload+extract+generate+import route — same timeout risk
 // as extract/route.ts, compounded by also writing to the DB in the same
@@ -13,6 +14,9 @@ export const maxDuration = 60;
 // Reuses InterviewExtractionService (Milestone 1/2, unchanged) and
 // InterviewImportService (Milestone 3) — no logic duplicated here.
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const formData = await req.formData();
     const file = formData.get("file");

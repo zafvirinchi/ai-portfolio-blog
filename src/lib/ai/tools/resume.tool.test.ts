@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // resume.tool.ts is a Tool Registry member that fans out into ~20
 // sibling services (billing, auth, recruiter, recruitment, linkedin,
@@ -23,16 +23,41 @@ vi.mock("../resume-rewriter/rewrite-service", () => ({ rewriteRequestContext: no
 vi.mock("../cover-letter/cover-service", () => ({ coverRequestContext: noStore, coverLetterService: { get: () => undefined } }));
 vi.mock("../linkedin/linkedin-service", () => ({ linkedinRequestContext: noStore, linkedinService: { get: () => undefined } }));
 vi.mock("../recruiter/candidate-ranking", () => ({ computeRankingScore: vi.fn(() => 0) }));
+
+// Phase 19 Milestone 5 — recruiterRequestContext needs to be a
+// controllable store (unlike the other siblings' static `noStore`) so
+// the entitlement-bypass regression tests below can simulate an active
+// Recruiter Workspace chat session.
+const { recruiterStore, compareMock, recommendMock, findByNameFragmentMock } = vi.hoisted(() => ({
+  recruiterStore: vi.fn<() => { active: boolean; recruiterId: string | null } | undefined>(),
+  compareMock: vi.fn(),
+  recommendMock: vi.fn(),
+  findByNameFragmentMock: vi.fn(),
+}));
 vi.mock("../recruiter/candidate-service", () => ({
   candidateService: {
     list: () => [],
-    findByNameFragment: () => [],
+    findByNameFragment: (...args: unknown[]) => findByNameFragmentMock(...args),
     searchBySkill: () => [],
     findReadyForInterview: () => [],
     listForSystemUse: () => [],
     searchBySkillForSystemUse: () => [],
+    compare: (...args: unknown[]) => compareMock(...args),
+    recommendTopCandidates: (...args: unknown[]) => recommendMock(...args),
   },
-  recruiterRequestContext: noStore,
+  recruiterRequestContext: { getStore: () => recruiterStore() },
+}));
+
+// Phase 19 Milestone 5 — genuine bypass found and fixed: handleRecruiterMessage()
+// (compare/recommend branches) previously called candidateService.compare()/
+// recommendTopCandidates() with NO entitlement check, unlike their dedicated
+// sibling routes (/api/ai/recruiter/compare, /recommend), which both require
+// recruiter.analytics. requireFeature is mocked here as a controllable spy so
+// the tests below can prove it's called BEFORE the LLM-backed service call,
+// and that a rejection prevents the service call entirely.
+const { requireFeatureMock } = vi.hoisted(() => ({ requireFeatureMock: vi.fn() }));
+vi.mock("../../billing/entitlement-service", () => ({
+  requireFeature: (...args: unknown[]) => requireFeatureMock(...args),
 }));
 vi.mock("../recruitment/candidate-stage", () => ({ daysInStage: vi.fn(() => 0) }));
 vi.mock("../recruitment/interview-scheduler", () => ({ interviewScheduler: { list: () => [], generateFeedbackSummary: vi.fn() } }));
@@ -172,5 +197,63 @@ describe("resume.tool.ts — Phase 9 regression (Part 10)", () => {
     expect(context).toContain("Key strengths: Strong Java fundamentals");
     expect(context).toContain("Weaknesses: Limited cloud exposure");
     expect(context).toContain("Missing Cloud skills: Kubernetes");
+  });
+});
+
+describe("resume.tool.ts — Phase 19 Milestone 5, recruiter-chat entitlement bypass regression", () => {
+  beforeEach(() => {
+    recruiterStore.mockReset();
+    findByNameFragmentMock.mockReset();
+    requireFeatureMock.mockReset();
+    compareMock.mockReset();
+    recommendMock.mockReset();
+  });
+
+  it("requires recruiter.analytics BEFORE calling the LLM-backed compare(), same gate the dedicated /api/ai/recruiter/compare route enforces", async () => {
+    recruiterStore.mockReturnValue({ active: true, recruiterId: "recruiter-1" });
+    findByNameFragmentMock.mockImplementation((name: string) => [{ candidateId: name === "Jane Doe" ? "c1" : "c2", name }]);
+    requireFeatureMock.mockResolvedValue(undefined);
+    compareMock.mockResolvedValue({ candidates: [{ name: "Jane Doe" }, { name: "John Smith" }], recommendation: "Jane is stronger.", rankingRationale: "Better ATS score." });
+
+    await resumeTool.execute("Compare Jane Doe and John Smith");
+
+    expect(requireFeatureMock).toHaveBeenCalledWith("recruiter-1", "recruiter.analytics");
+    expect(compareMock).toHaveBeenCalled();
+    // The entitlement check must happen BEFORE the LLM call, not after or in parallel.
+    const requireOrder = requireFeatureMock.mock.invocationCallOrder[0];
+    const compareOrder = compareMock.mock.invocationCallOrder[0];
+    expect(requireOrder).toBeLessThan(compareOrder);
+  });
+
+  it("a rejected recruiter.analytics check prevents compare() from ever running — no LLM call after rejection", async () => {
+    recruiterStore.mockReturnValue({ active: true, recruiterId: "recruiter-1" });
+    findByNameFragmentMock.mockImplementation((name: string) => [{ candidateId: name === "Jane Doe" ? "c1" : "c2", name }]);
+    requireFeatureMock.mockRejectedValue(new Error("This feature (recruiter.analytics) isn't included in your current plan."));
+
+    const response = await resumeTool.execute("Compare Jane Doe and John Smith");
+
+    expect(compareMock).not.toHaveBeenCalled();
+    expect(response.result.context).toContain("This feature (recruiter.analytics) isn't included in your current plan.");
+  });
+
+  it("requires recruiter.analytics BEFORE calling the LLM-backed recommendTopCandidates(), same gate the dedicated /api/ai/recruiter/recommend route enforces", async () => {
+    recruiterStore.mockReturnValue({ active: true, recruiterId: "recruiter-1" });
+    requireFeatureMock.mockResolvedValue(undefined);
+    recommendMock.mockResolvedValue({ candidates: [], summary: "Top candidates summary." });
+
+    await resumeTool.execute("Recommend top 5 candidates");
+
+    expect(requireFeatureMock).toHaveBeenCalledWith("recruiter-1", "recruiter.analytics");
+    expect(recommendMock).toHaveBeenCalled();
+  });
+
+  it("a rejected recruiter.analytics check prevents recommendTopCandidates() from ever running", async () => {
+    recruiterStore.mockReturnValue({ active: true, recruiterId: "recruiter-1" });
+    requireFeatureMock.mockRejectedValue(new Error("This feature (recruiter.analytics) isn't included in your current plan."));
+
+    const response = await resumeTool.execute("Recommend top 5 candidates");
+
+    expect(recommendMock).not.toHaveBeenCalled();
+    expect(response.result.context).toContain("isn't included in your current plan");
   });
 });

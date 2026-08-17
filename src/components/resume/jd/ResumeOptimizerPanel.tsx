@@ -2,6 +2,8 @@
 
 import { ReactNode, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type {
   ChangedBullet,
   RemovedItem,
@@ -97,16 +99,23 @@ export default function ResumeOptimizerPanel({ jdMatchId }: Props) {
   const [result, setResult] = useState<ResumeOptimizerResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   async function handleGenerate() {
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch(`/api/ai/resume/jd-match/${jdMatchId}/optimize`, { method: "POST" });
       const data = await response.json();
 
       if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Resume optimization failed");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
         throw new Error(data.error || "Resume optimization failed");
       }
 
@@ -135,10 +144,23 @@ export default function ResumeOptimizerPanel({ jdMatchId }: Props) {
           {loading ? "Optimizing your resume..." : "Generate Optimized Resume"}
         </button>
 
-        {error && (
-          <div className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
+        {entitlementError ? (
+          <UpgradePrompt
+            className="mx-auto mt-4 max-w-xl text-left"
+            featureLabel="Resume Optimization"
+            code={entitlementError.code}
+          featureId={entitlementError.featureId}
+            message={entitlementError.message}
+            limit={entitlementError.limit}
+            used={entitlementError.used}
+            period={entitlementError.period}
+          />
+        ) : (
+          error && (
+            <div className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )
         )}
       </div>
     );

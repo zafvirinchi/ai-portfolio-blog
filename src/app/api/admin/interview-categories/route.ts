@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function GET() {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   const { data, error } = await supabaseAdmin
     .from("interview_categories")
     .select("*")
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const body = await req.json();
 

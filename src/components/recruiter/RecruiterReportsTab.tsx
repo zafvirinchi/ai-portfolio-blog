@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo } from "@/lib/billing/entitlement-client-error";
+import { downloadExport } from "@/lib/billing/export-download";
 import type { CandidateSummary } from "@/lib/ai/recruiter/candidate-types";
 import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
 
@@ -10,10 +13,44 @@ type Props = {
   jobs: RecruiterJobRecord[];
 };
 
+// Phase 18 Milestone 8, Step 11 — these 5 links (unlike the single-
+// candidate PDF report below, which has no entitlement gate at all)
+// hit /api/ai/recruiter/export, gated by recruiter.export/
+// recruiter.hiring_report since M5. A plain <a href> can't intercept a
+// 402 JSON rejection — the browser just navigates the whole tab to raw
+// JSON. Converted to fetch+blob (downloadExport(), extracted Phase 19
+// M5 into export-download.ts once this same pattern was needed a 2nd
+// and 3rd time elsewhere) so a rejection renders UpgradePrompt inline
+// instead, without changing the SUCCESS path's actual file-saving
+// behavior at all (still a real browser download, same filename, same
+// content-type). Deliberately NOT applied to the "Download Candidate
+// Report" link below — that route has no entitlement gate to intercept
+// in the first place (verified this milestone), so converting it would
+// add complexity with nothing to fix.
 export default function RecruiterReportsTab({ candidates, jobs }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [exportJobId, setExportJobId] = useState("");
   const jobQuery = exportJobId ? `&jobId=${exportJobId}` : "";
+
+  const [pendingExport, setPendingExport] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function handleExport(key: string, url: string, filename: string) {
+    setPendingExport(key);
+    setEntitlementError(null);
+    setExportError(null);
+
+    const result = await downloadExport(url, filename);
+
+    if (result && "networkError" in result) {
+      setExportError(result.networkError);
+    } else if (result) {
+      setEntitlementError(result);
+    }
+
+    setPendingExport(null);
+  }
 
   return (
     <div className="space-y-4">
@@ -36,27 +73,33 @@ export default function RecruiterReportsTab({ candidates, jobs }: Props) {
           ))}
         </select>
         <div className="flex flex-wrap gap-2">
-          <a
-            href={`/api/ai/recruiter/export?format=csv${jobQuery}`}
+          <button
+            type="button"
+            onClick={() => handleExport("candidates-csv", `/api/ai/recruiter/export?format=csv${jobQuery}`, "candidates.csv")}
+            disabled={pendingExport === "candidates-csv"}
             aria-label="Export candidates as CSV"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            CSV
-          </a>
-          <a
-            href={`/api/ai/recruiter/export?format=excel${jobQuery}`}
+            {pendingExport === "candidates-csv" ? "Exporting..." : "CSV"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport("candidates-excel", `/api/ai/recruiter/export?format=excel${jobQuery}`, "candidates.xlsx")}
+            disabled={pendingExport === "candidates-excel"}
             aria-label="Export candidates as XLSX"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Excel
-          </a>
-          <a
-            href={`/api/ai/recruiter/export?format=pdf${jobQuery}`}
+            {pendingExport === "candidates-excel" ? "Exporting..." : "Excel"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport("candidates-pdf", `/api/ai/recruiter/export?format=pdf${jobQuery}`, "candidates.pdf")}
+            disabled={pendingExport === "candidates-pdf"}
             aria-label="Export candidates as PDF"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            PDF
-          </a>
+            {pendingExport === "candidates-pdf" ? "Exporting..." : "PDF"}
+          </button>
         </div>
       </div>
 
@@ -65,22 +108,43 @@ export default function RecruiterReportsTab({ candidates, jobs }: Props) {
         <h3 className="mb-1 text-sm font-bold text-slate-700">Hiring Decision Report</h3>
         <p className="mb-3 text-xs text-slate-500">Pipeline summary, conversion metrics, decision breakdown, interview outcome, and top candidates — deterministic, same scope as above.</p>
         <div className="flex flex-wrap gap-2">
-          <a
-            href={`/api/ai/recruiter/export?type=hiring-report&format=csv${jobQuery}`}
+          <button
+            type="button"
+            onClick={() => handleExport("hiring-report-csv", `/api/ai/recruiter/export?type=hiring-report&format=csv${jobQuery}`, "hiring-report.csv")}
+            disabled={pendingExport === "hiring-report-csv"}
             aria-label="Export hiring report as CSV"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Export Hiring Report (CSV)
-          </a>
-          <a
-            href={`/api/ai/recruiter/export?type=hiring-report&format=excel${jobQuery}`}
+            {pendingExport === "hiring-report-csv" ? "Exporting..." : "Export Hiring Report (CSV)"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport("hiring-report-excel", `/api/ai/recruiter/export?type=hiring-report&format=excel${jobQuery}`, "hiring-report.xlsx")}
+            disabled={pendingExport === "hiring-report-excel"}
             aria-label="Export hiring report as XLSX"
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Export Hiring Report (Excel)
-          </a>
+            {pendingExport === "hiring-report-excel" ? "Exporting..." : "Export Hiring Report (Excel)"}
+          </button>
         </div>
       </div>
+
+      {entitlementError && (
+        <UpgradePrompt
+          featureLabel="Candidate Export"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+        />
+      )}
+      {exportError && (
+        <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {exportError}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="mb-3 text-sm font-bold text-slate-700">Candidate Report (PDF)</h3>

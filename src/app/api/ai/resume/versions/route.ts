@@ -4,6 +4,8 @@ import { ZodError } from "zod";
 import { requireUserId, createVersionSchema, resumeVersionService, UnauthorizedError } from "@/lib/ai/resume-versions";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -36,6 +38,11 @@ export async function POST(req: Request) {
 
     if (body.jobDescriptionText) {
       await checkCredits("jd_match");
+      // Additive to the org-scoped check above, same pattern as
+      // /api/ai/resume/jd-match's own requireQuota()/recordUsage()
+      // integration — this route requires a real session (requireUserId()
+      // above), so userId is always the platform user id here.
+      await requireQuota(userId, "JD_MATCHES");
     }
 
     const startedAt = Date.now();
@@ -46,6 +53,8 @@ export async function POST(req: Request) {
 
     if (body.jobDescriptionText) {
       await consumeCredits("jd_match", Date.now() - startedAt);
+      // Recorded only after the analysis genuinely succeeded.
+      await recordUsage(userId, "JD_MATCHES");
     }
 
     return NextResponse.json({ version });
@@ -57,6 +66,9 @@ export async function POST(req: Request) {
     if (error instanceof ZodError) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
       return NextResponse.json({ error: error.message }, { status: 402 });

@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { interviewImportService } from "@/lib/ai/interview-import";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 
 // Same reasoning as extract/route.ts — a large approved batch means many
 // sequential Supabase writes (category/topic lookups + question inserts).
@@ -34,6 +35,9 @@ const confirmRequestSchema = z.object({
 // degrades gracefully if those columns don't exist yet (see
 // supabase/migrations).
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const body = await req.json();
     const parsed = confirmRequestSchema.safeParse(body);

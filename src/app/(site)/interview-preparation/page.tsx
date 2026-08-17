@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import Tabs, { TabItem } from "@/components/ui/Tabs";
 import PrepOverview from "@/components/interview-prep/PrepOverview";
 import PrepPracticeTab from "@/components/interview-prep/PrepPracticeTab";
@@ -35,6 +37,7 @@ function InterviewPreparationContent() {
   const [checkingExistingPrep, setCheckingExistingPrep] = useState(!!existingPrepId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [jobDescriptionText, setJobDescriptionText] = useState("");
   const [intelligence, setIntelligence] = useState<InterviewIntelligence | null>(null);
 
@@ -76,6 +79,7 @@ function InterviewPreparationContent() {
 
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const body = resumeVersionId
@@ -91,6 +95,11 @@ function InterviewPreparationContent() {
       const data = await response.json();
 
       if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Interview preparation failed");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
         throw new Error(data.error || "Interview preparation failed");
       }
 
@@ -158,10 +167,23 @@ function InterviewPreparationContent() {
         >
           {loading ? "Preparing..." : "Generate Interview Preparation"}
         </button>
-        {error && (
-          <div role="alert" className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
+        {entitlementError ? (
+          <UpgradePrompt
+            className="mx-auto mt-4 max-w-xl text-left"
+            featureLabel="Interview Preparation"
+            code={entitlementError.code}
+          featureId={entitlementError.featureId}
+            message={entitlementError.message}
+            limit={entitlementError.limit}
+            used={entitlementError.used}
+            period={entitlementError.period}
+          />
+        ) : (
+          error && (
+            <div role="alert" className="mx-auto mt-4 max-w-xl rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {error}
+            </div>
+          )
         )}
       </div>
     );

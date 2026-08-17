@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { fromWebFile } from "@/lib/ai/ingestion/document-loader";
 import { jobService } from "@/lib/ai/job/job-service";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 
 // One OpenAI structured-output call — same timeout budget as
 // /api/ai/resume's equivalent single-call shape.
@@ -16,8 +19,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "A job description file is required" }, { status: 400 });
     }
 
+    // Phase 18 Milestone 5 — additive, no-op for anonymous callers.
+    // job.analyzer draws from the same pooled JD_MATCHES metric as
+    // resume.jd.match/job.match.
+    const platformUserId = await getOptionalUserId();
+    if (platformUserId) await requireQuota(platformUserId, "JD_MATCHES");
+
     const input = await fromWebFile(file);
     const record = await jobService.parseFile(input);
+    if (platformUserId) await recordUsage(platformUserId, "JD_MATCHES");
 
     return NextResponse.json({
       jobId: record.jobId,
@@ -27,6 +37,9 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("[job-agent] API route failed", error);
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     // Every failure here — unsupported format (images/Excel/Zip/...), no
     // extractable text, or a schema-validation failure — is a client-side

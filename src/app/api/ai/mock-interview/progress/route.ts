@@ -4,6 +4,9 @@ import { InterviewIntelligence } from "@/lib/ai/interview-prep/interview-intelli
 import { computeInterviewProgress, isSameContext, SessionProgressPoint } from "@/lib/ai/mock-interview/interview-progress";
 import { buildSessionDebrief, SessionNotCompletedError } from "@/lib/ai/mock-interview/session-debrief";
 import { sessionService } from "@/lib/ai/mock-interview/session-service";
+import { requireFeature } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 
 // Phase 17 Milestone 6 — read-only, deterministic, zero-LLM. sessionService
 // has no list()/getAll() method (audited — see the milestone's final
@@ -36,6 +39,21 @@ export async function GET(req: Request) {
 
   if (sessionIds.length === 0) {
     return NextResponse.json({ error: "sessionIds must include at least one session id." }, { status: 400 });
+  }
+
+  // Phase 18 Milestone 5 — additive, no-op for anonymous callers (this
+  // route stays fully unauthenticated, exactly like its sibling debrief
+  // route). interview.progress has no metric (NONE on Free, UNLIMITED
+  // on Pro/Premium) — a boolean feature gate.
+  const platformUserId = await getOptionalUserId();
+  if (platformUserId) {
+    try {
+      await requireFeature(platformUserId, "interview.progress");
+    } catch (error) {
+      const entitlementError = entitlementErrorResponse(error);
+      if (entitlementError) return entitlementError;
+      throw error;
+    }
   }
 
   const points: SessionProgressPoint[] = [];

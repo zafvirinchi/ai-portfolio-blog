@@ -4,6 +4,9 @@ import { fromWebFile, loadDocument } from "@/lib/ai/ingestion/document-loader";
 import { parseDocument, normalizeText } from "@/lib/ai/ingestion/document-parser";
 import { jobMatchService } from "@/lib/ai/job-match/job-match-service";
 import { checkAndRecordUsage, getClientIp } from "@/lib/ai/job-match/rate-limiter";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 
 // Parses the resume, then makes two OpenAI calls (resume extraction is
 // inside jobMatchService, plus the job-match analysis itself) — same
@@ -61,12 +64,23 @@ export async function POST(req: Request) {
       );
     }
 
+    // Phase 18 Milestone 5 — additive to the pre-existing IP-based daily
+    // rate limit above (which stays exactly as-is for anonymous
+    // callers). JD_MATCHES is the same pooled metric resume.jd.match/
+    // job.analyzer also draw from — a no-op for anonymous requests.
+    const platformUserId = await getOptionalUserId();
+    if (platformUserId) await requireQuota(platformUserId, "JD_MATCHES");
+
     const resumeInput = await fromWebFile(resumeFile);
     const result = await jobMatchService.analyze(resumeInput, jobDescription);
+    if (platformUserId) await recordUsage(platformUserId, "JD_MATCHES");
 
     return NextResponse.json(result);
   } catch (error) {
     console.error("[job-match] API route failed", error);
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Job match analysis failed" },

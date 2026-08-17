@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { CandidateFitLevel } from "@/lib/ai/recruiter/candidate-types";
 import type { AttentionPriority, RecruiterAnalytics } from "@/lib/ai/recruiter/recruiter-analytics-types";
 import type { RecruiterJobRecord } from "@/lib/ai/recruiter/recruiter-job-types";
@@ -45,17 +47,26 @@ export default function RecruiterAnalyticsTab({ jobs }: Props) {
   const [analytics, setAnalytics] = useState<RecruiterAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setEntitlementError(null);
 
     try {
       const url = selectedJobId ? `/api/ai/recruiter/analytics?jobId=${selectedJobId}` : "/api/ai/recruiter/analytics";
       const response = await fetch(url);
       const data = await response.json();
 
-      if (!response.ok) throw new Error(data.error || "Failed to load analytics");
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Failed to load analytics");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Failed to load analytics");
+      }
 
       setAnalytics(data);
     } catch (err) {
@@ -73,6 +84,21 @@ export default function RecruiterAnalyticsTab({ jobs }: Props) {
 
   if (loading) {
     return <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading analytics...</div>;
+  }
+
+  if (entitlementError) {
+    return (
+      <UpgradePrompt
+        featureLabel="Candidate Analytics"
+        code={entitlementError.code}
+        featureId={entitlementError.featureId}
+        message={entitlementError.message}
+        limit={entitlementError.limit}
+        used={entitlementError.used}
+        period={entitlementError.period}
+        onRetry={refresh}
+      />
+    );
   }
 
   if (error || !analytics) {

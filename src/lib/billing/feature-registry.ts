@@ -28,9 +28,11 @@ export const FEATURE_REGISTRY: Record<FeatureId, FeatureDefinition> = {
   "resume.templates": { id: "resume.templates", category: "resume", label: "Resume Templates", primaryPersona: "JOB_SEEKER" },
   "resume.versions": { id: "resume.versions", category: "resume", label: "Resume Versions", primaryPersona: "JOB_SEEKER" },
   "resume.export": { id: "resume.export", category: "resume", label: "Resume Export", primaryPersona: "JOB_SEEKER" },
+  "resume.linkedin_optimizer": { id: "resume.linkedin_optimizer", category: "resume", label: "LinkedIn Optimizer", primaryPersona: "JOB_SEEKER" },
 
   "job.match": { id: "job.match", category: "job", label: "Job Match", primaryPersona: "JOB_SEEKER" },
   "job.analyzer": { id: "job.analyzer", category: "job", label: "Job Description Analyzer", primaryPersona: "JOB_SEEKER" },
+  "job.cover_letter": { id: "job.cover_letter", category: "job", label: "Cover Letter Generator", primaryPersona: "JOB_SEEKER" },
 
   "interview.prepare": { id: "interview.prepare", category: "interview", label: "Interview Preparation", primaryPersona: "JOB_SEEKER" },
   "interview.mock": { id: "interview.mock", category: "interview", label: "Mock Interview", primaryPersona: "JOB_SEEKER" },

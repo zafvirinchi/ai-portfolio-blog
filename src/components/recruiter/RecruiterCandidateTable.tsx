@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementAwareError, EntitlementErrorInfo } from "@/lib/billing/entitlement-client-error";
+import { downloadExport } from "@/lib/billing/export-download";
 import { ALLOWED_STATUS_TRANSITIONS, CANDIDATE_STATUSES, CandidateStatus } from "@/lib/ai/recruiter/candidate-schema";
 import { buildInterviewEligibility, isInterviewEligibleStatus } from "@/lib/ai/recruiter/candidate-interview";
 import type { CandidateFitLevel, CandidateSummary, EvaluationStatus } from "@/lib/ai/recruiter/candidate-types";
@@ -68,6 +71,9 @@ export default function RecruiterCandidateTable({ candidates, jobs, loading, onS
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkEntitlementError, setBulkEntitlementError] = useState<EntitlementErrorInfo | null>(null);
+  const [lastBulkStatus, setLastBulkStatus] = useState<CandidateStatus | null>(null);
+  const [pendingExport, setPendingExport] = useState<string | null>(null);
 
   const jobById = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
 
@@ -177,10 +183,20 @@ export default function RecruiterCandidateTable({ candidates, jobs, loading, onS
     if (selectedIds.length === 0) return;
     setBulkBusy(true);
     setBulkError(null);
+    setBulkEntitlementError(null);
+    setLastBulkStatus(status);
     try {
       await onBulkStatusChange(selectedIds, status);
       setSelectedIds([]);
     } catch (err) {
+      // Phase 19 M4, Step 5 — a genuine entitlement rejection (e.g. a
+      // Free-tier recruiter's bulk write blocked, Phase 19 M3 §6) gets
+      // the same UpgradePrompt every other gated surface uses, instead
+      // of collapsing to a plain string.
+      if (err instanceof EntitlementAwareError) {
+        setBulkEntitlementError(err.info);
+        return;
+      }
       // §4/§24 — the whole batch is rejected server-side (atomic, no
       // partial writes) whenever any selected candidate can't legally
       // reach `status` — surfaced here rather than silently discarded.
@@ -188,6 +204,30 @@ export default function RecruiterCandidateTable({ candidates, jobs, loading, onS
     } finally {
       setBulkBusy(false);
     }
+  }
+
+  // Phase 19 Milestone 5 — genuine defect found and fixed: these two
+  // links hit /api/ai/recruiter/export, gated by recruiter.export/
+  // RECRUITER_EXPORTS (the same route Phase 18 M8 already fixed 5
+  // OTHER callers of, in RecruiterReportsTab.tsx) — a plain <a href>
+  // can't intercept a 402 JSON rejection, so a recruiter who exhausted
+  // their export quota would have the whole tab navigate to raw JSON
+  // instead of seeing UpgradePrompt. Converted to the same fetch+blob
+  // pattern (downloadExport()) as every other export link in this app.
+  async function handleExport(key: string, url: string, filename: string) {
+    setPendingExport(key);
+    setBulkEntitlementError(null);
+    setLastBulkStatus(null); // not a bulk-status rejection — no retry action applies
+
+    const result = await downloadExport(url, filename);
+
+    if (result && "networkError" in result) {
+      setBulkError(result.networkError);
+    } else if (result) {
+      setBulkEntitlementError(result);
+    }
+
+    setPendingExport(null);
   }
 
   return (
@@ -361,21 +401,38 @@ export default function RecruiterCandidateTable({ candidates, jobs, loading, onS
               Reject Selected
             </button>
             {/* Phase 16 Milestone 9, §3 — server-side ownership is re-verified on every request (candidateService.listByIds); this link can never export a candidate the recruiter doesn't own, regardless of what's selected here. */}
-            <a
-              href={`/api/ai/recruiter/export?format=csv&candidateIds=${selectedIds.join(",")}`}
+            <button
+              type="button"
+              onClick={() => handleExport("selected-csv", `/api/ai/recruiter/export?format=csv&candidateIds=${selectedIds.join(",")}`, "candidates.csv")}
+              disabled={pendingExport === "selected-csv"}
               aria-label="Export selected candidates as CSV"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Export Selected (CSV)
-            </a>
-            <a
-              href={`/api/ai/recruiter/export?format=excel&candidateIds=${selectedIds.join(",")}`}
+              {pendingExport === "selected-csv" ? "Exporting..." : "Export Selected (CSV)"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExport("selected-excel", `/api/ai/recruiter/export?format=excel&candidateIds=${selectedIds.join(",")}`, "candidates.xlsx")}
+              disabled={pendingExport === "selected-excel"}
               aria-label="Export selected candidates as XLSX"
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Export Selected (Excel)
-            </a>
+              {pendingExport === "selected-excel" ? "Exporting..." : "Export Selected (Excel)"}
+            </button>
           </div>
+          {bulkEntitlementError && (
+            <UpgradePrompt
+              featureLabel="Bulk Status Update"
+              code={bulkEntitlementError.code}
+              featureId={bulkEntitlementError.featureId}
+              message={bulkEntitlementError.message}
+              limit={bulkEntitlementError.limit}
+              used={bulkEntitlementError.used}
+              period={bulkEntitlementError.period}
+              onRetry={lastBulkStatus ? () => handleBulkAction(lastBulkStatus) : undefined}
+            />
+          )}
+
           {bulkError && (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               {bulkError}

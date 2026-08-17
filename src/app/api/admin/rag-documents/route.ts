@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { createEmbedding } from "@/lib/ai/embeddings";
 import * as activityService from "@/lib/saas/activity-service";
@@ -24,6 +25,9 @@ function chunkText(text: string, chunkSize = 1000, overlap = 150) {
 }
 
 export async function POST(req: Request) {
+  const guard = await requireAdminRoute();
+  if (!guard.ok) return guard.response;
+
   try {
     const body = await req.json();
 

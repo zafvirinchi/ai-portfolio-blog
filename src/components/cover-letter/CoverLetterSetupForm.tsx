@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import { COVER_LETTER_LENGTHS, COVER_LETTER_STYLES } from "@/lib/ai/cover-letter/cover-schema";
 import type { CoverLetterLength, CoverLetterStyle } from "@/lib/ai/cover-letter/cover-schema";
 import type { CoverLetterRecord } from "@/lib/ai/cover-letter/cover-types";
@@ -21,10 +23,12 @@ export default function CoverLetterSetupForm({ jdMatchId, loading, error, onGene
   const [length, setLength] = useState<CoverLetterLength>("Standard");
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   async function handleGenerate() {
     setSubmitting(true);
     setLocalError(null);
+    setEntitlementError(null);
 
     try {
       const response = await fetch("/api/ai/cover-letter", {
@@ -43,6 +47,11 @@ export default function CoverLetterSetupForm({ jdMatchId, loading, error, onGene
       const data = await response.json();
 
       if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Failed to generate cover letter");
+        if (entitlement) {
+          setEntitlementError(entitlement);
+          return;
+        }
         throw new Error(data.error || "Failed to generate cover letter");
       }
 
@@ -131,8 +140,23 @@ export default function CoverLetterSetupForm({ jdMatchId, loading, error, onGene
         {submitting ? "Generating..." : "Generate Cover Letter"}
       </button>
 
+      {entitlementError && (
+        <UpgradePrompt
+          featureLabel="Cover Letter Generator"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+          onRetry={handleGenerate}
+        />
+      )}
+
       {(localError || error) && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{localError || error}</div>
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {localError || error}
+        </div>
       )}
     </div>
   );

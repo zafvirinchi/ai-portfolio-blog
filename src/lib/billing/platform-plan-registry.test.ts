@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getDefaultPlanForRole, getFeatureEntitlement, PLATFORM_PLAN_DEFINITIONS } from "./platform-plan-registry";
+import { findCheapestPlanGranting, getDefaultPlanForRole, getFeatureEntitlement, PLATFORM_PLAN_DEFINITIONS } from "./platform-plan-registry";
 import { FEATURE_IDS, PLATFORM_PLAN_KEYS } from "./platform-schema";
 
 // Phase 18 Milestone 1 — the plan matrix is pure static data; these
@@ -81,5 +81,51 @@ describe("getDefaultPlanForRole", () => {
 
   it("returns null for ADMIN — a privileged role, never a commercial plan tier", () => {
     expect(getDefaultPlanForRole("ADMIN")).toBeNull();
+  });
+});
+
+describe("resume.ai_assistant quota policy — Phase 19 Milestone 2", () => {
+  it("remains NONE on Free — unchanged, still a hard zero-cost boundary", () => {
+    expect(getFeatureEntitlement("JOB_SEEKER_FREE", "resume.ai_assistant").access).toBe("NONE");
+  });
+
+  it("is a REAL, metered ceiling on Pro — never true-unlimited for the repo's highest-fan-out LLM feature", () => {
+    const entitlement = getFeatureEntitlement("JOB_SEEKER_PRO", "resume.ai_assistant");
+    expect(entitlement).toEqual({ access: "LIMITED", metric: "AI_CHAT_MESSAGES", limit: 300, period: "MONTH" });
+  });
+
+  it("Premium's ceiling is real but strictly higher than Pro's", () => {
+    const entitlement = getFeatureEntitlement("JOB_SEEKER_PREMIUM", "resume.ai_assistant");
+    expect(entitlement.access).toBe("LIMITED");
+    expect(entitlement.metric).toBe("AI_CHAT_MESSAGES");
+    expect(entitlement.limit).toBeGreaterThan(300);
+  });
+});
+
+describe("findCheapestPlanGranting — Phase 19 Milestone 1, Step 7 (UpgradePrompt's 'what plan unlocks it?')", () => {
+  it("finds the FREE tier itself when a feature is already granted there (e.g. a LIMITED feature)", () => {
+    expect(findCheapestPlanGranting("resume.ats.score")?.key).toBe("JOB_SEEKER_FREE");
+  });
+
+  it("skips FREE and finds the first paid tier that grants a Free-excluded feature", () => {
+    // resume.optimize is NONE on JOB_SEEKER_FREE, UNLIMITED from JOB_SEEKER_PRO onward.
+    expect(findCheapestPlanGranting("resume.optimize")?.key).toBe("JOB_SEEKER_PRO");
+  });
+
+  it("finds the top tier when a feature is exclusive to it (e.g. Business-only recruiter.hiring_report)", () => {
+    expect(findCheapestPlanGranting("recruiter.hiring_report")?.key).toBe("RECRUITER_BUSINESS");
+  });
+
+  it("never crosses plan families — a recruiter feature only ever resolves to a RECRUITER plan", () => {
+    const plan = findCheapestPlanGranting("recruiter.analytics");
+    expect(plan?.role).toBe("RECRUITER");
+  });
+
+  it("is consistent with getFeatureEntitlement — the plan it names genuinely grants the feature", () => {
+    for (const featureId of FEATURE_IDS) {
+      const plan = findCheapestPlanGranting(featureId);
+      if (!plan) continue;
+      expect(getFeatureEntitlement(plan.key, featureId).access).not.toBe("NONE");
+    }
   });
 });

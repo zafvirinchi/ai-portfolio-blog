@@ -104,10 +104,15 @@ export async function handleStripeWebhook(rawBody: string, signature: string): P
   const provider = getBillingProvider("stripe");
   const { type, raw } = await provider.verifyAndConstructWebhookEvent(rawBody, signature);
   const event = raw as Stripe.Event;
+  // Phase 21 Milestone 2 — the Stripe event's own authoritative clock,
+  // used (not wall-clock Date.now()) for every ordering-sensitive write
+  // below — see subscription-service.ts's upsertFromProvider()/
+  // markCanceled() for the full rationale.
+  const eventCreatedAt = new Date(event.created * 1000).toISOString();
 
   switch (type) {
     case "checkout.session.completed":
-      await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+      await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, eventCreatedAt);
       break;
     case "invoice.paid":
       await handleInvoicePaid(event.data.object as Stripe.Invoice);
@@ -116,10 +121,10 @@ export async function handleStripeWebhook(rawBody: string, signature: string): P
       await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
       break;
     case "customer.subscription.updated":
-      await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+      await handleSubscriptionUpdated(event.data.object as Stripe.Subscription, eventCreatedAt);
       break;
     case "customer.subscription.deleted":
-      await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+      await handleSubscriptionDeleted(event.data.object as Stripe.Subscription, eventCreatedAt);
       break;
     default:
       return { handled: false, type };
@@ -128,7 +133,7 @@ export async function handleStripeWebhook(rawBody: string, signature: string): P
   return { handled: true, type };
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<void> {
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session, eventCreatedAt: string): Promise<void> {
   const organizationId = session.metadata?.organizationId;
   const planKey = session.metadata?.planKey as PlanKey | undefined;
   const couponCode = session.metadata?.couponCode;
@@ -150,11 +155,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
     providerCustomerId: customerId,
     providerSubscriptionId: subscriptionId,
     currentPeriodEnd: null,
+    eventCreatedAt,
   });
 
   const amountCents = session.amount_total ?? 0;
 
-  await paymentService.record({
+  const payment = await paymentService.record({
     organizationId,
     subscriptionId: subscription.id,
     provider: "stripe",
@@ -164,7 +170,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promis
     status: "succeeded",
   });
 
-  await invoiceService.create({ organizationId, subscriptionId: subscription.id, amountCents });
+  // Phase 21 Milestone 2 — a duplicate payment (redelivered webhook,
+  // detected by payment-service.ts's own dedup check) means this
+  // checkout was already fully processed once; writing a second invoice
+  // for it would duplicate the organization's invoice history for no
+  // new real payment.
+  if (payment) {
+    await invoiceService.create({ organizationId, subscriptionId: subscription.id, amountCents });
+  }
 
   if (couponCode) {
     try {
@@ -184,7 +197,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   const subscription = await subscriptionService.getActiveSubscription(organizationId);
   const amountCents = invoice.amount_paid;
 
-  await paymentService.record({
+  const payment = await paymentService.record({
     organizationId,
     subscriptionId: subscription.isImplicitFree ? null : subscription.id,
     provider: "stripe",
@@ -194,7 +207,10 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     status: "succeeded",
   });
 
-  await invoiceService.create({ organizationId, subscriptionId: subscription.isImplicitFree ? null : subscription.id, amountCents });
+  // See handleCheckoutCompleted's identical Phase 21 Milestone 2 comment.
+  if (payment) {
+    await invoiceService.create({ organizationId, subscriptionId: subscription.isImplicitFree ? null : subscription.id, amountCents });
+  }
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
@@ -214,7 +230,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   });
 }
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription, eventCreatedAt: string): Promise<void> {
   const organizationId = subscription.metadata?.organizationId;
   const planKey = subscription.metadata?.planKey as PlanKey | undefined;
 
@@ -234,14 +250,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Pro
     providerCustomerId: typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id,
     providerSubscriptionId: subscription.id,
     currentPeriodEnd,
+    eventCreatedAt,
   });
 }
 
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription, eventCreatedAt: string): Promise<void> {
   const organizationId = subscription.metadata?.organizationId;
   if (!organizationId) return;
 
-  await subscriptionService.markCanceled(organizationId);
+  await subscriptionService.markCanceled(organizationId, eventCreatedAt);
 }
 
 async function resolveOrganizationIdFromCustomer(customer: Stripe.Invoice["customer"]): Promise<string | null> {

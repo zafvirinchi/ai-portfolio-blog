@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import { ALLOWED_STATUS_TRANSITIONS, CANDIDATE_TAGS, NOTE_CATEGORIES, CandidateStatus, CandidateTag, NoteCategory } from "@/lib/ai/recruiter/candidate-schema";
 import { buildInterviewEligibility, buildInterviewReadinessView } from "@/lib/ai/recruiter/candidate-interview";
 import type { CandidateFitLevel, CandidateProfile, EvaluationStatus } from "@/lib/ai/recruiter/candidate-types";
@@ -47,6 +49,11 @@ export default function CandidateProfilePage() {
   // an already-loaded candidate look like it vanished (§15/§29): it
   // shows as an inline banner alongside the still-visible profile.
   const [actionError, setActionError] = useState<string | null>(null);
+  // Phase 19 M4, Step 5-8 — distinct from actionError: a genuine
+  // entitlement rejection (FEATURE_NOT_INCLUDED/QUOTA_EXCEEDED/
+  // AUTH_REQUIRED) renders the same UpgradePrompt every other gated
+  // surface already uses, instead of a plain error string.
+  const [actionEntitlementError, setActionEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [noteCategory, setNoteCategory] = useState<NoteCategory>("Recruiter");
   const [noteText, setNoteText] = useState("");
@@ -221,6 +228,7 @@ export default function CandidateProfilePage() {
 
     setBusy("match");
     setActionError(null);
+    setActionEntitlementError(null);
     try {
       const response = await fetch(`/api/ai/recruiter/candidates/${candidateId}/match`, {
         method: "POST",
@@ -228,7 +236,14 @@ export default function CandidateProfilePage() {
         body: JSON.stringify({ jobId: matchJobId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Matching against the job failed.");
+        if (entitlement) {
+          setActionEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error);
+      }
       await load();
     } catch (err) {
       // §16 — a failed match must never discard the candidate's already-persisted ATS score or prior state; load() is simply not called on failure, so the profile keeps showing its last-known-good data.
@@ -241,10 +256,18 @@ export default function CandidateProfilePage() {
   async function handleReEvaluate() {
     setBusy("evaluate");
     setActionError(null);
+    setActionEntitlementError(null);
     try {
       const response = await fetch(`/api/ai/recruiter/candidates/${candidateId}/evaluate`, { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Re-evaluation failed");
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Re-evaluation failed");
+        if (entitlement) {
+          setActionEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Re-evaluation failed");
+      }
       await load();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Re-evaluation failed.");
@@ -255,9 +278,22 @@ export default function CandidateProfilePage() {
 
   async function handleGenerateInsights() {
     setBusy("insights");
+    setActionError(null);
+    setActionEntitlementError(null);
     try {
-      await fetch(`/api/ai/recruiter/candidates/${candidateId}/insights`, { method: "POST" });
+      const response = await fetch(`/api/ai/recruiter/candidates/${candidateId}/insights`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Insights generation failed.");
+        if (entitlement) {
+          setActionEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Insights generation failed.");
+      }
       await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Insights generation failed.");
     } finally {
       setBusy(null);
     }
@@ -266,10 +302,18 @@ export default function CandidateProfilePage() {
   async function handleGenerateReadiness() {
     setBusy("readiness");
     setActionError(null);
+    setActionEntitlementError(null);
     try {
       const response = await fetch(`/api/ai/recruiter/candidates/${candidateId}/interview-readiness`, { method: "POST" });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
+      if (!response.ok) {
+        const entitlement = readEntitlementError(data, "Interview readiness generation failed.");
+        if (entitlement) {
+          setActionEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error);
+      }
       await load();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Interview readiness generation failed.");
@@ -310,6 +354,18 @@ export default function CandidateProfilePage() {
         <Link href="/recruiter" className="text-sm font-semibold text-blue-600 hover:underline">
           ← Back to Workspace
         </Link>
+
+        {actionEntitlementError && (
+          <UpgradePrompt
+            featureLabel="Candidate Evaluation"
+            code={actionEntitlementError.code}
+            featureId={actionEntitlementError.featureId}
+            message={actionEntitlementError.message}
+            limit={actionEntitlementError.limit}
+            used={actionEntitlementError.used}
+            period={actionEntitlementError.period}
+          />
+        )}
 
         {actionError && (
           <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">

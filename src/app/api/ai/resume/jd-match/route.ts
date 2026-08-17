@@ -5,6 +5,9 @@ import { jdMatchService } from "@/lib/ai/job-description/jd-service";
 import type { JobDescriptionUploadInput } from "@/lib/ai/job-description/jd-types";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
+import { getOptionalUserId } from "@/lib/billing/persona-service";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
 
@@ -48,9 +51,21 @@ export async function POST(req: Request) {
 
     await checkCredits("jd_match");
 
+    // Phase 18 Milestone 5 — additive to the org-scoped check above,
+    // same pattern as /api/ai/resume's own requireQuota() integration
+    // (M1). A no-op for every anonymous request; only enforced for a
+    // real signed-in user. JD_MATCHES is shared across resume.jd.match/
+    // job.match/job.analyzer (entitlement-service.ts's own
+    // featuresUsingMetric() doc comment) — the same monthly pool, on
+    // purpose.
+    const platformUserId = await getOptionalUserId();
+    if (platformUserId) await requireQuota(platformUserId, "JD_MATCHES");
+
     const startedAt = Date.now();
     const record = await withUsageContext("JD_MATCHING", "JD_ANALYSIS", () => jdMatchService.analyze({ resumeId, jd }));
     await consumeCredits("jd_match", Date.now() - startedAt);
+    // Recorded only after the analysis genuinely succeeded.
+    if (platformUserId) await recordUsage(platformUserId, "JD_MATCHES");
 
     return NextResponse.json({
       jdMatchId: record.jdMatchId,
@@ -59,6 +74,9 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("[jd] API route failed", error);
+
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
       return NextResponse.json({ error: error.message }, { status: 402 });

@@ -16,8 +16,11 @@ import { authRequestContext } from "@/lib/auth/permission-service";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
+import { recordUsage, requireFeature, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
+import { checkAndRecordAnonymousUsage, getClientIp } from "@/lib/ai/rate-limiting/anonymous-ai-rate-limiter";
 
 export async function POST(req: Request) {
 
@@ -32,6 +35,55 @@ export async function POST(req: Request) {
                 { status: 400 }
             );
 
+        }
+
+        // Phase 14 Milestone 2 — resolved here (moved up from its
+        // previous position just before withAuthContext below) so the
+        // Phase 21 Milestone 2 anonymous rate limit immediately below
+        // can run before ANY of the tool-context wiring, checkCredits,
+        // or the multi-agent graph itself. Still exactly one
+        // auth.getUser() call per request, just relocated — not a
+        // duplicated identity resolution.
+        const supabaseAuth = await createSupabaseServerClient();
+        const {
+            data: { user: authUser },
+        } = await supabaseAuth.auth.getUser();
+
+        // Phase 21 Milestone 2 — audit finding (Phase 21 M1 §13 Finding
+        // 3 / §8): this route was fully anonymous-capable with a
+        // multi-agent fan-out of up to ~6 LLM calls per message and NO
+        // cost control at all for an unauthenticated caller — the
+        // entitlement checks further below are correctly a no-op for
+        // anonymous callers (Phase 19 M2's own explicit "never silently
+        // change anonymous behavior" rule), which meant nothing else
+        // stood between this open route and an unbounded OpenAI bill.
+        // Deliberately scoped to ONLY anonymous callers (authUser ===
+        // null): an authenticated user is governed exclusively by the
+        // existing Phase 18/19 entitlement/quota system below,
+        // completely unchanged by this gate — this module is never even
+        // called for a request with a resolved session, so it cannot
+        // double-count against or interact with that system. Runs
+        // before any tool-context wiring, checkCredits, or the graph
+        // itself — zero LLM calls on rejection.
+        if (!authUser) {
+            const ip = getClientIp(req);
+            const rateLimit = await checkAndRecordAnonymousUsage("ai_chat", ip);
+
+            if (!rateLimit.allowed) {
+                const headers: Record<string, string> = {};
+                if (rateLimit.retryAfterSeconds !== undefined) {
+                    headers["Retry-After"] = String(rateLimit.retryAfterSeconds);
+                }
+
+                return NextResponse.json(
+                    {
+                        error: `You've reached today's free limit of ${rateLimit.limit} anonymous chat messages. Sign in for higher limits, or try again later.`,
+                        code: "RATE_LIMITED",
+                        retryAfterSeconds: rateLimit.retryAfterSeconds,
+                    },
+                    { status: 429, headers }
+                );
+            }
         }
 
         const askQuestion = () =>
@@ -159,19 +211,29 @@ export async function POST(req: Request) {
                   )
                 : withInterviewSources();
 
-        // Phase 14 Milestone 2 — resolved independently of organization
-        // membership (unlike tenantContext above), so "show my active
-        // sessions"/"when did I last log in" work even for a logged-in
-        // user with no organization yet.
-        const supabaseAuth = await createSupabaseServerClient();
-        const {
-            data: { user: authUser },
-        } = await supabaseAuth.auth.getUser();
-
+        // authUser was already resolved above (before the anonymous
+        // rate-limit gate) — reused here, not re-resolved, so this
+        // remains exactly one auth.getUser() call per request.
         const withAuthContext = () =>
             authUser
                 ? authRequestContext.run({ userId: authUser.id, email: authUser.email ?? null }, withOrganizationContext)
                 : withOrganizationContext();
+
+        // Phase 18 Milestone 5 / Phase 19 Milestone 2 — additive to the
+        // org-scoped check above, no-op for anonymous callers (this
+        // remains a fully anonymous-usable public AI page, unchanged —
+        // Phase 19 M2's own explicit instruction against silently
+        // changing anonymous behavior). requireFeature() first so a
+        // Free-tier user (still NONE) gets an accurate
+        // FEATURE_NOT_INCLUDED rather than a misleading "0/0 quota"
+        // from requireQuota() alone; requireQuota() then bounds the
+        // real per-message fan-out cost for Pro/Premium (M2 — see
+        // platform-plan-registry.ts's own comment on this feature).
+        // Both checks run BEFORE the graph below ever invokes an LLM.
+        if (authUser) {
+          await requireFeature(authUser.id, "resume.ai_assistant");
+          await requireQuota(authUser.id, "AI_CHAT_MESSAGES");
+        }
 
         // Phase 14 Milestone 4 — the whole chat flow (planner, tools,
         // generation, multi-agent) runs inside one usageRequestContext
@@ -182,6 +244,14 @@ export async function POST(req: Request) {
         const response = await withUsageContext("AI_CHAT", "LLM_CALL", withAuthContext);
 
         await consumeCredits("ai_chat");
+        // Phase 19 Milestone 2 — recorded exactly once per user-visible
+        // request, here, AFTER the entire multi-agent graph above has
+        // already resolved successfully — never inside the graph/
+        // coordinator/agents themselves, so however many internal LLM
+        // calls one message fanned out into (Step 5's own "one
+        // user-visible request = one usage unit" rule), this is the
+        // single place that counts as one unit of AI_CHAT_MESSAGES.
+        if (authUser) await recordUsage(authUser.id, "AI_CHAT_MESSAGES");
 
         return NextResponse.json(
             interviewStore.sources.length > 0
@@ -192,6 +262,9 @@ export async function POST(req: Request) {
     } catch (error) {
 
         console.error(error);
+
+        const entitlementError = entitlementErrorResponse(error);
+        if (entitlementError) return entitlementError;
 
         if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError) {
             return NextResponse.json(

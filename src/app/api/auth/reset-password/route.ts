@@ -5,6 +5,7 @@ import { resetPasswordSchema } from "@/lib/auth/auth-schema";
 import { checkHistory, recordPasswordChange } from "@/lib/auth/password-service";
 import * as sessionService from "@/lib/auth/session-service";
 import { createSupabaseRouteClient } from "@/lib/supabase-server";
+import { resolveDefaultLandingPath } from "@/lib/billing/persona-service";
 
 export async function POST(req: Request) {
   try {
@@ -38,7 +39,14 @@ export async function POST(req: Request) {
     await auditAuth.record(req, { action: "Password Changed", userId: user.id });
     console.log("[auth] Password Changed", { userId: user.id, via: "reset" });
 
-    return NextResponse.json({ success: true });
+    // Phase 23 Milestone 5 — genuine defect found and fixed: this
+    // completion path never computed a persona-aware landing path, so an
+    // existing RECRUITER resetting a forgotten password always landed on
+    // /resume-analyzer, diverging from every other completion path
+    // wired through finalizeLogin()/resolveDefaultLandingPath().
+    const defaultLandingPath = await resolveDefaultLandingPath(user.id);
+
+    return NextResponse.json({ success: true, defaultLandingPath });
   } catch (error) {
     console.error("[auth] Reset-password route failed", error);
 

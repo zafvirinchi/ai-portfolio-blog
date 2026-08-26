@@ -28,6 +28,16 @@ vi.mock("./platform-subscription-service", () => ({
   upsertSubscription: (...args: unknown[]) => upsertSubscriptionMock(...args),
 }));
 
+// Phase 23 Milestone 4 — persona-service.ts constructs real Supabase
+// clients at import time (supabase-server.ts's cookies(), supabase/
+// admin.ts's service-role client) — mocked here the same way every
+// other real dependency in this file already is, per this repo's
+// established test convention (see CLAUDE.md's Testing Standards).
+const activateRecruiterPersonaMock = vi.fn();
+vi.mock("./persona-service", () => ({
+  activateRecruiterPersona: (...args: unknown[]) => activateRecruiterPersonaMock(...args),
+}));
+
 import {
   DuplicateSubscriptionError,
   handlePlatformStripeWebhook,
@@ -56,6 +66,7 @@ beforeEach(() => {
   resolveStripeBackedPlanMock.mockReset().mockResolvedValue(null);
   saveCustomerMock.mockReset();
   upsertSubscriptionMock.mockReset();
+  activateRecruiterPersonaMock.mockReset().mockResolvedValue(["JOB_SEEKER", "RECRUITER"]);
 });
 
 describe("initiateCheckout — Step 6/7 plan validation and Step 5 customer reuse", () => {
@@ -99,6 +110,41 @@ describe("initiateCheckout — Step 6/7 plan validation and Step 5 customer reus
     getCustomerByUserIdMock.mockResolvedValue({ id: "row1", user_id: "u1", stripe_customer_id: "cus_1", email: null, created_at: "", updated_at: "" });
 
     await expect(initiateCheckout({ userId: "u1", email: null, planKey: "RECRUITER_PRO", origin: "https://app.example.com" })).resolves.toEqual({ url: "https://checkout.stripe.com/fake" });
+  });
+
+  // Phase 23 Milestone 4 — audit finding: resolveEffectivePlans() only
+  // ever resolves a plan for a role already in app_metadata.platform_roles
+  // — a caller could reach this function directly (bypassing /recruiter's
+  // own activation gate and /settings/billing's role-filtered plan
+  // cards) and successfully pay for a RECRUITER plan that would then be
+  // permanently ignored. Fixed by self-service-activating RECRUITER
+  // before checkout, so payment can never outrun role activation.
+  describe("RECRUITER checkout self-activates the role first (Step: payment must never outrun entitlement)", () => {
+    it("activates RECRUITER before creating a Stripe checkout session for a RECRUITER plan", async () => {
+      await initiateCheckout({ userId: "u1", email: "u1@example.com", planKey: "RECRUITER_PRO", origin: "https://app.example.com" });
+
+      expect(activateRecruiterPersonaMock).toHaveBeenCalledWith("u1");
+      expect(createCheckoutSessionMock).toHaveBeenCalled();
+    });
+
+    it("does NOT call activateRecruiterPersona for a JOB_SEEKER plan checkout", async () => {
+      await initiateCheckout({ userId: "u1", email: "u1@example.com", planKey: "JOB_SEEKER_PRO", origin: "https://app.example.com" });
+
+      expect(activateRecruiterPersonaMock).not.toHaveBeenCalled();
+    });
+
+    it("is idempotent — a caller who already holds RECRUITER still succeeds (activateRecruiterPersona's own idempotency, not duplicated here)", async () => {
+      activateRecruiterPersonaMock.mockResolvedValue(["RECRUITER"]);
+
+      await expect(initiateCheckout({ userId: "u1", email: "u1@example.com", planKey: "RECRUITER_BUSINESS", origin: "https://app.example.com" })).resolves.toEqual({
+        url: "https://checkout.stripe.com/fake",
+      });
+    });
+
+    it("still rejects an unrecognized plan before ever activating a role", async () => {
+      await expect(initiateCheckout({ userId: "u1", email: "u1@example.com", planKey: "NOT_A_REAL_PLAN", origin: "https://app.example.com" })).rejects.toBeInstanceOf(InvalidPlanError);
+      expect(activateRecruiterPersonaMock).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -5,6 +5,7 @@ import { supabaseAdmin } from "../supabase/admin";
 import { PASSWORD_POLICY } from "./auth-schema";
 
 const SCRYPT_KEY_LENGTH = 64;
+const LOG_PREFIX = "[auth]";
 
 /** Node's built-in scrypt KDF — no new dependency. Format: "<saltHex>:<hashHex>". */
 export function hashSecret(secret: string): string {
@@ -47,7 +48,14 @@ export function getPolicyViolations(password: string): string[] {
   return violations;
 }
 
-/** Throws if newPassword matches any of the user's last N password hashes. Never sees or stores the plaintext beyond this call. */
+/**
+ * Throws if newPassword matches any of the user's last N password hashes.
+ * Never sees or stores the plaintext beyond this call. Fails OPEN (logs,
+ * skips the check) if the lookup itself fails — e.g. password_history not
+ * migrated yet — rather than blocking password change/reset/registration
+ * entirely over a secondary hygiene check. The only throw that remains is
+ * a genuine reuse match, unaffected by this.
+ */
 export async function checkHistory(userId: string, newPassword: string): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from("password_history")
@@ -57,7 +65,8 @@ export async function checkHistory(userId: string, newPassword: string): Promise
     .limit(PASSWORD_POLICY.historyLimit);
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Password history lookup failed, skipping reuse check`, error);
+    return;
   }
 
   for (const row of data ?? []) {
@@ -67,11 +76,18 @@ export async function checkHistory(userId: string, newPassword: string): Promise
   }
 }
 
+/**
+ * Records a password-history bookkeeping row — never the real password
+ * itself (Supabase Auth already owns that). Fails OPEN (logs, returns)
+ * rather than throwing: this is pure bookkeeping for the reuse/expiration
+ * checks above, and must never block registration or a password change
+ * that Supabase Auth has already genuinely completed.
+ */
 export async function recordPasswordChange(userId: string, newPassword: string): Promise<void> {
   const { error } = await supabaseAdmin.from("password_history").insert({ user_id: userId, password_hash: hashSecret(newPassword) });
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Password history record failed, continuing without recording this change`, error);
   }
 }
 

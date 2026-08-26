@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { JdMatchResult, OptimizationMode } from "@/lib/ai/job-description/jd-schema";
 import { OPTIMIZATION_MODES } from "@/lib/ai/job-description/jd-schema";
 import type { CertificationRequirementMatch, CertificationRequirementStatus, EducationRequirementMatch, EducationRequirementStatus } from "@/lib/ai/job-description/keyword-engine";
@@ -321,6 +323,7 @@ export default function JdOptimizationReview({
 
   const [proposing, setProposing] = useState(false);
   const [proposeError, setProposeError] = useState<string | null>(null);
+  const [proposeEntitlementError, setProposeEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [result, setResult] = useState<ProposeResponse | null>(null);
 
   const [decisions, setDecisions] = useState<Record<string, boolean>>({});
@@ -342,6 +345,7 @@ export default function JdOptimizationReview({
     if (!jdText.trim()) return;
     setProposing(true);
     setProposeError(null);
+    setProposeEntitlementError(null);
     setResult(null);
     setApplyResult(null);
 
@@ -352,7 +356,18 @@ export default function JdOptimizationReview({
         body: JSON.stringify({ jobDescriptionText: jdText.trim(), mode }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Failed to analyze this job description");
+      if (!response.ok) {
+        // Phase 23 Milestone 5 — this route shares the JD_MATCHES quota
+        // with JdUpload.tsx/ResumeOptimizerPanel.tsx, which already
+        // handle a rejection via UpgradePrompt — this sibling panel
+        // previously showed a plain error string instead.
+        const entitlement = readEntitlementError(data, "Failed to analyze this job description");
+        if (entitlement) {
+          setProposeEntitlementError(entitlement);
+          return;
+        }
+        throw new Error(data.error || "Failed to analyze this job description");
+      }
 
       setResult(data);
       // Every AUTO-APPLICABLE proposal starts accepted — "Accept All" is
@@ -459,7 +474,21 @@ export default function JdOptimizationReview({
         </button>
       </div>
 
-      {proposeError && <p className="mt-2 text-xs font-semibold text-red-600">{proposeError}</p>}
+      {proposeEntitlementError ? (
+        <UpgradePrompt
+          className="mt-3"
+          featureLabel="JD Optimization"
+          code={proposeEntitlementError.code}
+          featureId={proposeEntitlementError.featureId}
+          message={proposeEntitlementError.message}
+          limit={proposeEntitlementError.limit}
+          used={proposeEntitlementError.used}
+          period={proposeEntitlementError.period}
+          onRetry={handleAnalyze}
+        />
+      ) : (
+        proposeError && <p className="mt-2 text-xs font-semibold text-red-600">{proposeError}</p>
+      )}
 
       {result && (
         <div className="mt-6 space-y-4 border-t border-blue-100 pt-5">

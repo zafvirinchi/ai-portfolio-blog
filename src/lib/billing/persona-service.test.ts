@@ -16,7 +16,19 @@ vi.mock("../supabase/admin", () => ({
   supabaseAdmin: { auth: { admin: { getUserById: (...args: unknown[]) => getUserByIdMock(...args), updateUserById: (...args: unknown[]) => updateUserByIdMock(...args) } } },
 }));
 
-import { AdminAccessRequiredError, getOptionalUserId, isAdmin, isRecruiter, PlatformUnauthorizedError, requirePlatformAdmin, requireUserId, resolvePlatformRoles, setPlatformRoles } from "./persona-service";
+import {
+  activateRecruiterPersona,
+  AdminAccessRequiredError,
+  getOptionalUserId,
+  isAdmin,
+  isRecruiter,
+  PlatformUnauthorizedError,
+  requirePlatformAdmin,
+  requireUserId,
+  resolveDefaultLandingPath,
+  resolvePlatformRoles,
+  setPlatformRoles,
+} from "./persona-service";
 
 // Phase 18 Milestone 1 — roles live in Supabase Auth's own app_metadata,
 // never a new table (see this file's own header comment) — these tests
@@ -108,6 +120,54 @@ describe("requireUserId — Phase 18 M2/M3, a package-appropriate message (not r
   it("returns a null email when the session has none, never a fabricated placeholder", async () => {
     mockUser.current = { id: "u1" };
     expect(await requireUserId()).toEqual({ userId: "u1", email: null });
+  });
+});
+
+describe("activateRecruiterPersona — Phase 23 Milestone 3, the one self-service role opt-in", () => {
+  it("adds RECRUITER to an existing JOB_SEEKER-only account, additive not replacing", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER"] } } }, error: null });
+    updateUserByIdMock.mockResolvedValue({ data: {}, error: null });
+
+    const roles = await activateRecruiterPersona("u1");
+
+    expect(roles).toEqual(["JOB_SEEKER", "RECRUITER"]);
+    expect(updateUserByIdMock).toHaveBeenCalledWith("u1", { app_metadata: { platform_roles: ["JOB_SEEKER", "RECRUITER"] } });
+  });
+
+  it("is idempotent — a caller who already holds RECRUITER gets the same roles back with no write", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER", "RECRUITER"] } } }, error: null });
+
+    const roles = await activateRecruiterPersona("u1");
+
+    expect(roles).toEqual(["JOB_SEEKER", "RECRUITER"]);
+    expect(updateUserByIdMock).not.toHaveBeenCalled();
+  });
+
+  it("never grants ADMIN or any role other than RECRUITER — the function accepts no role parameter at all", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER"] } } }, error: null });
+    updateUserByIdMock.mockResolvedValue({ data: {}, error: null });
+
+    await activateRecruiterPersona("u1");
+
+    const writtenRoles = updateUserByIdMock.mock.calls[0][1].app_metadata.platform_roles;
+    expect(writtenRoles).not.toContain("ADMIN");
+  });
+});
+
+describe("resolveDefaultLandingPath — Phase 23 Milestone 3 post-login routing", () => {
+  it("routes a RECRUITER (even multi-role) to the Recruiter Workspace", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER", "RECRUITER"] } } }, error: null });
+    expect(await resolveDefaultLandingPath("u1")).toBe("/recruiter");
+  });
+
+  it("routes a plain JOB_SEEKER to the resume analyzer", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["JOB_SEEKER"] } } }, error: null });
+    expect(await resolveDefaultLandingPath("u1")).toBe("/resume-analyzer");
+  });
+
+  it("routes an ADMIN-only account to the resume analyzer (no special-cased admin landing)", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { app_metadata: { platform_roles: ["ADMIN"] } } }, error: null });
+    expect(await resolveDefaultLandingPath("u1")).toBe("/resume-analyzer");
   });
 });
 

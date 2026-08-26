@@ -10,7 +10,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // own mocking conventions for the sibling anonymous-capable AI route).
 const requireQuotaMock = vi.fn();
 const recordUsageMock = vi.fn();
-const { FakeQuotaExceededError } = vi.hoisted(() => ({
+// Phase 23 Milestone 5 — FeatureNotEntitledError/PlatformUnauthorizedError
+// are needed here (even though this route only ever throws
+// QuotaExceededError itself) because entitlement-response.ts's
+// entitlementErrorResponse() — now wired into this route's catch block —
+// imports all three from these same two (mocked) modules at load time;
+// see resume-rewriter/route.test.ts for the identical convention.
+const { FakeQuotaExceededError, FakeFeatureNotEntitledError } = vi.hoisted(() => ({
   FakeQuotaExceededError: class extends Error {
     metric: string;
     limit: number;
@@ -25,17 +31,27 @@ const { FakeQuotaExceededError } = vi.hoisted(() => ({
       this.period = period;
     }
   },
+  FakeFeatureNotEntitledError: class extends Error {
+    featureId: string;
+    constructor(featureId: string) {
+      super(`"${featureId}" isn't included in your current plan.`);
+      this.name = "FeatureNotEntitledError";
+      this.featureId = featureId;
+    }
+  },
 }));
 
 vi.mock("@/lib/billing/entitlement-service", () => ({
   requireQuota: (...args: unknown[]) => requireQuotaMock(...args),
   recordUsage: (...args: unknown[]) => recordUsageMock(...args),
   QuotaExceededError: FakeQuotaExceededError,
+  FeatureNotEntitledError: FakeFeatureNotEntitledError,
 }));
 
 const getOptionalUserIdMock = vi.fn();
 vi.mock("@/lib/billing/persona-service", () => ({
   getOptionalUserId: (...args: unknown[]) => getOptionalUserIdMock(...args),
+  PlatformUnauthorizedError: class extends Error {},
 }));
 
 const checkCreditsMock = vi.fn();
@@ -149,5 +165,18 @@ describe("POST /api/ai/resume — Phase 21 Milestone 2 anonymous rate limit", ()
     expect(response.status).toBe(402);
     expect(analyzeUploadMock).not.toHaveBeenCalled();
     expect(recordUsageMock).not.toHaveBeenCalled();
+  });
+
+  it("Phase 23 Milestone 5 — the 402 body now carries the structured entitlement shape (code/limit/used/period), so the client's readEntitlementError()/UpgradePrompt can recognize it instead of showing a generic failure string", async () => {
+    getOptionalUserIdMock.mockResolvedValue("u1");
+    requireQuotaMock.mockRejectedValue(new FakeQuotaExceededError("ATS_CHECKS", 5, 5, "MONTH"));
+
+    const response = await POST(fakeRequest());
+    const body = await response.json();
+
+    expect(body.code).toBe("QUOTA_EXCEEDED");
+    expect(body.limit).toBe(5);
+    expect(body.used).toBe(5);
+    expect(body.period).toBe("MONTH");
   });
 });

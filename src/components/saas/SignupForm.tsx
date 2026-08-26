@@ -28,7 +28,11 @@ export default function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createSupabaseBrowserClient();
-  const redirectTo = searchParams.get("redirect") || "/settings/organization";
+  // Phase 23 Milestone 5 — kept as the RAW explicit param, matching
+  // LoginForm.tsx's identical fix: handleOAuth only ever forwards a
+  // real, explicit redirect to /auth/callback, which computes its own
+  // persona-aware default when absent.
+  const explicitRedirect = searchParams.get("redirect") || undefined;
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -60,7 +64,14 @@ export default function SignupForm() {
         return;
       }
 
-      router.push(redirectTo);
+      // Phase 23 Milestone 5 — mirrors LoginForm.tsx's finish(): an
+      // explicit ?redirect= always wins; absent one, use the server's
+      // persona-aware default (always /resume-analyzer for a brand-new
+      // signup today, since every account starts as JOB_SEEKER-only —
+      // wired through now for consistency with every other completion
+      // path, and to keep working correctly if that ever changes, e.g.
+      // a pre-provisioned invite flow).
+      router.push(searchParams.get("redirect") || data.defaultLandingPath || "/resume-analyzer");
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -71,7 +82,7 @@ export default function SignupForm() {
 
   async function handleOAuth(provider: OAuthProviderId) {
     setError("");
-    const { error: oauthError } = await signInWithOAuth(supabase, provider, redirectTo);
+    const { error: oauthError } = await signInWithOAuth(supabase, provider, explicitRedirect);
     if (oauthError) setError(oauthError.message);
   }
 

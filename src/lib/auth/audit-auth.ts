@@ -41,6 +41,7 @@ export async function record(req: Request, input: AuthAuditInput): Promise<void>
   }
 }
 
+/** Fails OPEN (logs, returns an empty list) rather than throwing — matches record()'s own already-correct behavior above. */
 export async function list(userId: string, limit = 50): Promise<AuditLogEntry[]> {
   const { data, error } = await supabaseAdmin
     .from("audit_logs")
@@ -50,7 +51,8 @@ export async function list(userId: string, limit = 50): Promise<AuditLogEntry[]>
     .limit(limit);
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Audit list failed, returning empty`, error);
+    return [];
   }
 
   return data ?? [];

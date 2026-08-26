@@ -13,7 +13,7 @@ import { createSupabaseRouteClient } from "@/lib/supabase-server";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
-  const redirectTo = url.searchParams.get("redirect") || "/settings/organization";
+  const explicitRedirect = url.searchParams.get("redirect");
 
   if (code) {
     const supabase = await createSupabaseRouteClient();
@@ -23,9 +23,9 @@ export async function GET(req: Request) {
       // OAuth/SSO logins are treated as already strongly authenticated
       // by the external IdP — no additional TOTP challenge here, unlike
       // the email+password flow in auth-service.ts's login().
-      await finalizeLogin(req, data.user.id);
+      const { defaultLandingPath } = await finalizeLogin(req, data.user.id);
 
-      return NextResponse.redirect(new URL(redirectTo, url.origin));
+      return NextResponse.redirect(new URL(explicitRedirect || defaultLandingPath, url.origin));
     }
   }
 

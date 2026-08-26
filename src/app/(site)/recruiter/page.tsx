@@ -42,6 +42,42 @@ export default function RecruiterWorkspacePage() {
   const [recommendEntitlementError, setRecommendEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [jobs, setJobs] = useState<RecruiterJobRecord[]>([]);
 
+  // Phase 23 Milestone 3 — audit finding: requireRecruiterId() only
+  // proves "signed in," never "holds the RECRUITER role" — every write
+  // action below (create job, import, match, ...) independently enforces
+  // recruiter.* entitlement and would reject a JOB_SEEKER-only account
+  // with FEATURE_NOT_INCLUDED, with no self-service way to ever fix
+  // that (see persona-service.ts's activateRecruiterPersona()). null =
+  // still loading; this starts true so the gate below doesn't flash.
+  const [isRecruiterRole, setIsRecruiterRole] = useState<boolean | null>(null);
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+
+  const refreshRole = useCallback(async () => {
+    const response = await fetch("/api/billing/platform/overview");
+    const data = await response.json();
+    if (response.ok) setIsRecruiterRole(Array.isArray(data.roles) && data.roles.includes("RECRUITER"));
+  }, []);
+
+  useEffect(() => {
+    refreshRole();
+  }, [refreshRole]);
+
+  async function handleActivateRecruiter() {
+    setActivating(true);
+    setActivateError(null);
+    try {
+      const response = await fetch("/api/persona/recruiter/activate", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to activate the Recruiter Workspace.");
+      setIsRecruiterRole(true);
+    } catch (err) {
+      setActivateError(err instanceof Error ? err.message : "Failed to activate the Recruiter Workspace.");
+    } finally {
+      setActivating(false);
+    }
+  }
+
   // Phase 21 Milestone 1 — audit finding: this function (and
   // refreshDashboard/refreshRanking below) applied the response body to
   // state unconditionally, unlike refreshJobs's own correct
@@ -262,6 +298,38 @@ export default function RecruiterWorkspacePage() {
     { id: "insights", label: "Insights", content: <RecruiterInsightsTab candidates={candidates} /> },
     { id: "reports", label: "Reports", content: <RecruiterReportsTab candidates={candidates} jobs={jobs} /> },
   ];
+
+  if (isRecruiterRole === false) {
+    return (
+      <section className="min-h-screen bg-slate-50 px-6 py-16">
+        <div className="mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-sm font-semibold uppercase tracking-widest text-blue-600">Recruiter Workspace</p>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900">Activate your Recruiter Workspace</h1>
+          <p className="mt-3 text-sm text-slate-600">
+            Post jobs, import candidates, screen against a job description, rank, shortlist, and export reports —
+            free to start, no organization required.
+          </p>
+          <button
+            type="button"
+            onClick={handleActivateRecruiter}
+            disabled={activating}
+            className="mt-6 rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {activating ? "Activating..." : "Activate Recruiter Workspace"}
+          </button>
+          {activateError && <p className="mt-3 text-sm text-red-600">{activateError}</p>}
+        </div>
+      </section>
+    );
+  }
+
+  if (isRecruiterRole === null) {
+    return (
+      <section className="flex min-h-screen items-center justify-center bg-slate-50">
+        <p className="text-sm text-slate-500">Loading your Recruiter Workspace…</p>
+      </section>
+    );
+  }
 
   return (
     <section className="min-h-screen bg-slate-50 px-6 py-16">

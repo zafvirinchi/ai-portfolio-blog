@@ -12,6 +12,7 @@ import { recordPasswordChange } from "./password-service";
 import { AUTH_SESSION_COOKIE_NAME } from "./session-service";
 import * as sessionService from "./session-service";
 import { checkLoginLockout, recordLoginAttempt, detectSuspiciousLogin, extractIp, extractUserAgent } from "./security-service";
+import { resolveDefaultLandingPath } from "../billing/persona-service";
 
 const LOG_PREFIX = "[auth]";
 const SESSION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -27,18 +28,34 @@ function sessionCookieOptions() {
 }
 
 /** Completes login bookkeeping once we're sure the user is fully authenticated (no MFA pending). Shared by login() and every MFA-verify route. */
-export async function finalizeLogin(req: Request, userId: string): Promise<void> {
+export async function finalizeLogin(req: Request, userId: string): Promise<{ defaultLandingPath: string }> {
   const ip = extractIp(req);
   const ua = extractUserAgent(req);
 
+  // session-service.ts's record() fails open (returns null, already
+  // logged internally) rather than throwing when its bookkeeping table
+  // is unavailable — real authentication already succeeded before this
+  // function was ever called, so a lost "Active Sessions" entry must
+  // never block login itself. Only set the tracking cookie when a real
+  // row actually exists to point at.
   const session = await sessionService.record(userId, ip, ua);
 
-  const cookieStore = await cookies();
-  cookieStore.set(AUTH_SESSION_COOKIE_NAME, session.id, sessionCookieOptions());
+  if (session) {
+    const cookieStore = await cookies();
+    cookieStore.set(AUTH_SESSION_COOKIE_NAME, session.id, sessionCookieOptions());
+  }
 
   await detectSuspiciousLogin(userId, ip, ua);
   await auditAuth.record(req, { action: "Login Success", userId });
   console.log(`${LOG_PREFIX} Login Success`, { userId });
+
+  // Phase 23 Milestone 3 — computed once, here, so every completion path
+  // (password login, every MFA-verify route, OAuth callback, immediate-
+  // session register()) agrees on the same RECRUITER-vs-JOB_SEEKER
+  // default without each duplicating the role lookup.
+  const defaultLandingPath = await resolveDefaultLandingPath(userId);
+
+  return { defaultLandingPath };
 }
 
 export async function login(req: Request, email: string, password: string): Promise<LoginResult> {
@@ -71,15 +88,16 @@ export async function login(req: Request, email: string, password: string): Prom
     return { success: true, mfaRequired: true, factorId: totpFactor.id, challengeId };
   }
 
-  await finalizeLogin(req, data.user.id);
+  const { defaultLandingPath } = await finalizeLogin(req, data.user.id);
 
-  return { success: true, mfaRequired: false };
+  return { success: true, mfaRequired: false, defaultLandingPath };
 }
 
 export interface RegisterResult {
   success: boolean;
   needsConfirmation: boolean;
   error?: string;
+  defaultLandingPath?: string;
 }
 
 export async function register(req: Request, email: string, password: string): Promise<RegisterResult> {
@@ -101,9 +119,9 @@ export async function register(req: Request, email: string, password: string): P
     return { success: true, needsConfirmation: true };
   }
 
-  await finalizeLogin(req, data.user.id);
+  const { defaultLandingPath } = await finalizeLogin(req, data.user.id);
 
-  return { success: true, needsConfirmation: false };
+  return { success: true, needsConfirmation: false, defaultLandingPath };
 }
 
 export async function logout(req: Request, scope: SignOutScope): Promise<void> {

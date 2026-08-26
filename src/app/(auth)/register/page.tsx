@@ -11,7 +11,8 @@ export default function RegisterPage() {
       <h1 className="text-4xl font-bold">Create an Account</h1>
 
       <p className="mt-4 text-gray-600">
-        Register to create or join organizations and workspaces.
+        Register to use the resume, interview prep, and recruiter tools — or create an organization if you&apos;re
+        managing a team.
       </p>
 
       <Suspense fallback={null}>

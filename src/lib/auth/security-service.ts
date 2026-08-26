@@ -36,7 +36,20 @@ export interface LockoutStatus {
   limit: number;
 }
 
-/** Read-only — counts recent failed login_attempt rows for this email. Does not record anything itself. */
+/**
+ * Read-only — counts recent failed login_attempt rows for this email.
+ * Does not record anything itself. Called as the very FIRST step of
+ * every login attempt (auth-service.ts's login()), before Supabase's own
+ * signInWithPassword() ever runs — fails OPEN (logs, reports "not
+ * locked") rather than throwing when security_events is unavailable, so
+ * a missing bookkeeping table can never block login itself. This mirrors
+ * recordLoginAttempt()'s own already-correct fail-open behavior just
+ * below; this read-side counterpart previously did not, and unlike a
+ * missing lockout counter (worst case: brute-force throttling is
+ * temporarily unavailable, while Supabase Auth's own password check
+ * still gates every attempt), throwing here made login entirely
+ * impossible for every user.
+ */
 export async function checkLoginLockout(email: string): Promise<LockoutStatus> {
   const since = new Date(Date.now() - LOCKOUT_POLICY.loginWindowMinutes * 60 * 1000).toISOString();
 
@@ -49,7 +62,8 @@ export async function checkLoginLockout(email: string): Promise<LockoutStatus> {
     .gte("created_at", since);
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Lockout check failed, treating as not locked`, error);
+    return { locked: false, failedAttempts: 0, limit: LOCKOUT_POLICY.maxFailedLoginAttempts };
   }
 
   const failedAttempts = count ?? 0;

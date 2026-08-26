@@ -6,6 +6,7 @@ import * as activityService from "@/lib/saas/activity-service";
 import { checkCredits, consumeCredits } from "@/lib/billing/credit-service";
 import { InsufficientCreditsError } from "@/lib/billing/billing-types";
 import { QuotaExceededError, recordUsage, requireQuota } from "@/lib/billing/entitlement-service";
+import { entitlementErrorResponse } from "@/lib/billing/entitlement-response";
 import { getOptionalUserId } from "@/lib/billing/persona-service";
 import { withUsageContext } from "@/lib/ai/usage/usage-context";
 import { InsufficientAiCreditsError } from "@/lib/ai/usage/usage-errors";
@@ -96,6 +97,17 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (error) {
     console.error("[resume-agent] Resume analysis failed", error);
+
+    // Phase 23 Milestone 5 — genuine defect found and fixed: this route
+    // never called entitlementErrorResponse(), so a QuotaExceededError
+    // was collapsed into a bare `{ error }` at 402 with no `code`/
+    // `limit`/`used`/`period` fields — the client's readEntitlementError()
+    // couldn't recognize it, so ResumeUpload.tsx showed a generic
+    // failure string instead of UpgradePrompt on this app's primary
+    // entry point. Checked first, matching every sibling gated route
+    // (resume-rewriter, cover-letter, linkedin, ...).
+    const entitlementError = entitlementErrorResponse(error);
+    if (entitlementError) return entitlementError;
 
     if (error instanceof InsufficientCreditsError || error instanceof InsufficientAiCreditsError || error instanceof QuotaExceededError) {
       return NextResponse.json({ error: error.message }, { status: 402 });

@@ -8,7 +8,7 @@ export default function LoginPage() {
       <h1 className="text-4xl font-bold">Log In</h1>
 
       <p className="mt-4 text-gray-600">
-        Log in to manage your organizations, workspaces, and team.
+        Log in to access your resume, interview prep, and recruiter tools.
       </p>
 
       <Suspense fallback={null}>

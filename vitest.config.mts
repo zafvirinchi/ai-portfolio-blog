@@ -95,6 +95,24 @@ export default defineConfig({
       "src/lib/billing/subscription-service.test.ts",
       "src/lib/billing/payment-service.test.ts",
       "src/lib/billing/billing-service.test.ts",
+      // Live production-activation defect fixes — login/register/password
+      // flows crashing when their bookkeeping tables are unmigrated.
+      "src/lib/auth/session-service.test.ts",
+      "src/lib/auth/security-service.test.ts",
+      "src/lib/auth/password-service.test.ts",
+      // Phase 23 Milestone 3 — role-aware SaaS dashboard/customer journey.
+      "src/app/api/persona/recruiter/activate/route.test.ts",
+      // Phase 23 Milestone 5 — recruitment pipeline cost/auth defects.
+      "src/app/api/ai/recruitment/jobs/[jobId]/pipeline/[candidateId]/recommendation/route.test.ts",
+      "src/app/api/ai/recruitment/interviews/[interviewId]/feedback/summarize/route.test.ts",
+      "src/app/api/ai/recruitment/interviews/[interviewId]/generate-kit/route.test.ts",
+      "src/app/api/ai/recruitment/emails/invitation/route.test.ts",
+      "src/app/api/ai/recruitment/emails/reminder/route.test.ts",
+      "src/app/api/ai/recruitment/emails/offer/route.test.ts",
+      "src/app/api/ai/recruitment/emails/rejection/route.test.ts",
+      "src/app/api/ai/recruitment/emails/follow-up/route.test.ts",
+      // Phase 24 Milestone 2 — contact form durability fix.
+      "src/app/api/contact/route.test.ts",
     ],
     environment: "node",
   },

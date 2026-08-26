@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import { READINESS_RECOMMENDATION_COPY } from "./readiness-presentation";
 import type { SessionRecord } from "@/lib/ai/mock-interview/session-types";
 import type {
@@ -93,9 +95,10 @@ export default function MockInterviewDebrief({ session, resumeId, jdMatchId, pre
   // would otherwise re-introduce the same synchronous-setState-in-effect
   // problem this structure avoids.
   const [result, setResult] = useState<{ debrief: SessionDebrief | null; error: string | null }>({ debrief: null, error: null });
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
   const isCompleted = session.status === "completed" && session.report !== null;
-  const loading = isCompleted && !result.debrief && !result.error;
+  const loading = isCompleted && !result.debrief && !result.error && !entitlementError;
 
   useEffect(() => {
     if (!isCompleted) return;
@@ -105,7 +108,18 @@ export default function MockInterviewDebrief({ session, resumeId, jdMatchId, pre
     fetch(`/api/ai/mock-interview/${session.sessionId}/debrief`)
       .then(async (response) => {
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Failed to load session debrief");
+        if (!response.ok) {
+          // Phase 23 Milestone 5 — this route is gated by
+          // requireFeature(..., "interview.debrief") (NONE on the Free
+          // plan) — a rejection here was previously shown as a generic
+          // error string instead of UpgradePrompt.
+          const entitlement = readEntitlementError(data, "Failed to load session debrief");
+          if (entitlement) {
+            if (!cancelled) setEntitlementError(entitlement);
+            return;
+          }
+          throw new Error(data.error || "Failed to load session debrief");
+        }
         if (!cancelled) setResult({ debrief: data, error: null });
       })
       .catch((err) => {
@@ -130,6 +144,20 @@ export default function MockInterviewDebrief({ session, resumeId, jdMatchId, pre
 
   if (loading) {
     return <div role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Building your debrief...</div>;
+  }
+
+  if (entitlementError) {
+    return (
+      <UpgradePrompt
+        featureLabel="Session Debrief"
+        code={entitlementError.code}
+        featureId={entitlementError.featureId}
+        message={entitlementError.message}
+        limit={entitlementError.limit}
+        used={entitlementError.used}
+        period={entitlementError.period}
+      />
+    );
   }
 
   if (error) {

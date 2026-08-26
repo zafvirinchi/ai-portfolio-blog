@@ -38,7 +38,11 @@ export default function ResetPasswordPage() {
       }
 
       setDone(true);
-      setTimeout(() => router.push("/settings/organization"), 1500);
+      // Phase 23 Milestone 5 — persona-aware, matching every other
+      // authentication-completion path (finalizeLogin()'s
+      // defaultLandingPath); falls back to /resume-analyzer only if the
+      // server didn't return one for some reason.
+      setTimeout(() => router.push(data.defaultLandingPath || "/resume-analyzer"), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Reset failed");
     } finally {

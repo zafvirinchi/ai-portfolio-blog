@@ -2,6 +2,8 @@
 
 import { ChangeEvent, DragEvent, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import type { ResumeAnalysisResult } from "@/lib/ai/resume/resume-types";
 
 const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt";
@@ -9,6 +11,22 @@ const ACCEPTED_EXTENSIONS = ".pdf,.docx,.txt";
 type Props = {
   onAnalyzed: (result: ResumeAnalysisResult) => void;
 };
+
+// Phase 23 Milestone 5 — genuine defect found and fixed: this route's
+// ATS_CHECKS quota rejection (the app's primary entry point) was shown
+// as a generic red string instead of UpgradePrompt, since a plain Error
+// loses everything but .message across XMLHttpRequest's reject path.
+// Carries the parsed JSON body through instead, matching the exact
+// pattern already used by JobUpload.tsx/JobMatchUpload.tsx/JdUpload.tsx.
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public body: unknown
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
 
 function uploadWithProgress(
   file: File,
@@ -39,7 +57,7 @@ function uploadWithProgress(
       if (xhr.status >= 200 && xhr.status < 300 && parsed) {
         resolve(parsed);
       } else {
-        reject(new Error(parsed?.error || "Resume analysis failed"));
+        reject(new ApiError(parsed?.error || "Resume analysis failed", parsed));
       }
     });
 
@@ -55,11 +73,13 @@ export default function ResumeUpload({ onAnalyzed }: Props) {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
   const [filename, setFilename] = useState<string | null>(null);
 
   async function handleFile(file: File) {
     setFilename(file.name);
     setError(null);
+    setEntitlementError(null);
     setUploading(true);
     setProgress(0);
 
@@ -67,7 +87,12 @@ export default function ResumeUpload({ onAnalyzed }: Props) {
       const result = await uploadWithProgress(file, setProgress);
       onAnalyzed(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Resume analysis failed.");
+      const entitlement = err instanceof ApiError ? readEntitlementError(err.body, err.message) : null;
+      if (entitlement) {
+        setEntitlementError(entitlement);
+      } else {
+        setError(err instanceof Error ? err.message : "Resume analysis failed.");
+      }
     } finally {
       setUploading(false);
     }
@@ -135,10 +160,23 @@ export default function ResumeUpload({ onAnalyzed }: Props) {
         )}
       </label>
 
-      {error && (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
+      {entitlementError ? (
+        <UpgradePrompt
+          className="mt-4"
+          featureLabel="Resume Analyzer"
+          code={entitlementError.code}
+          featureId={entitlementError.featureId}
+          message={entitlementError.message}
+          limit={entitlementError.limit}
+          used={entitlementError.used}
+          period={entitlementError.period}
+        />
+      ) : (
+        error && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )
       )}
     </div>
   );

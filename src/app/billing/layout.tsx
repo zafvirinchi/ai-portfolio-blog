@@ -59,6 +59,16 @@ export default async function BillingLayout({ children }: { children: React.Reac
             <p className="mt-2 text-sm text-slate-600">
               Billing is scoped to your organization. <Link href="/settings/organization" className="font-semibold text-blue-600">Create one</Link> to see plans and manage a subscription.
             </p>
+            {/* Phase 23 Milestone 3 — audit finding: a JOB_SEEKER/RECRUITER
+                looking for their OWN individual plan (not a team's) had no
+                way to discover /settings/billing from here. */}
+            <p className="mt-4 text-xs text-slate-500">
+              Looking for your personal Job Seeker or Recruiter plan instead?{" "}
+              <Link href="/settings/billing" className="font-semibold text-blue-600">
+                Go to My Billing
+              </Link>
+              .
+            </p>
           </div>
         ) : !context ? (
           <div className="mx-auto mb-6 max-w-lg rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center shadow-sm">

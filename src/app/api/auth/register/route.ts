@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: result.error ?? "Registration failed" }, { status: 422 });
     }
 
-    return NextResponse.json({ needsConfirmation: result.needsConfirmation });
+    return NextResponse.json({ needsConfirmation: result.needsConfirmation, defaultLandingPath: result.defaultLandingPath });
   } catch (error) {
     console.error("[auth] Register route failed", error);
 

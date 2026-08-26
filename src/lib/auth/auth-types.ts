@@ -67,6 +67,8 @@ export interface LoginResult {
   factorId?: string;
   challengeId?: string;
   error?: string;
+  /** Present only once fully authenticated (mfaRequired: false, success: true) — the RECRUITER-vs-JOB_SEEKER default landing page (persona-service.ts's resolveDefaultLandingPath()), absent an explicit ?redirect=. */
+  defaultLandingPath?: string;
 }
 
 export interface MfaEnrollResult {

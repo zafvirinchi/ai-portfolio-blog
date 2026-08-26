@@ -10,6 +10,7 @@ import {
   upsertSubscription,
 } from "./platform-subscription-service";
 import { createCheckoutSession, createPortalSession, createStripeCustomer, resolvePlanKeyFromPriceId, verifyPlatformWebhookSignature } from "./platform-stripe-provider";
+import { activateRecruiterPersona } from "./persona-service";
 
 const LOG_PREFIX = "[billing:platform]";
 
@@ -76,6 +77,26 @@ export async function initiateCheckout(input: InitiateCheckoutInput): Promise<{ 
   }
 
   const plan = PLATFORM_PLAN_DEFINITIONS[input.planKey];
+
+  // Phase 23 Milestone 4 — audit finding: resolveEffectivePlans() only
+  // ever resolves a plan for a role already in app_metadata.platform_roles
+  // (entitlement-service.ts's roles.map()) — it never inspects a Stripe
+  // subscription for a role the user doesn't hold. Before this fix, a
+  // caller could reach this function directly (e.g. a raw API call,
+  // bypassing /recruiter's activation gate and /settings/billing's own
+  // role-filtered plan cards, which never show a RECRUITER plan to a
+  // non-recruiter) and successfully pay for a RECRUITER plan that
+  // resolveEffectivePlans() would then permanently ignore — a real
+  // "payment succeeded but plan is ignored" state. Self-service-activate
+  // here, reusing the exact same additive/idempotent function
+  // /recruiter's own activation button calls, so checkout can never
+  // outrun role activation. JOB_SEEKER needs no such step (already every
+  // account's default); ADMIN has no billable plan tier at all (no
+  // ADMIN_* key exists in PLATFORM_PLAN_DEFINITIONS), so plan.role here
+  // is always JOB_SEEKER or RECRUITER.
+  if (plan.role === "RECRUITER") {
+    await activateRecruiterPersona(input.userId);
+  }
 
   const existingPaid = await resolveStripeBackedPlan(input.userId, plan.role);
   if (existingPaid) {

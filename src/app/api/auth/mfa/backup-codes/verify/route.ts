@@ -25,9 +25,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "That backup code is invalid or has already been used." }, { status: 422 });
     }
 
-    await finalizeLogin(req, user.id);
+    const { defaultLandingPath } = await finalizeLogin(req, user.id);
 
-    const response = NextResponse.json({ success: true });
+    const response = NextResponse.json({ success: true, defaultLandingPath });
 
     if (body.trustDevice) {
       const token = await issueTrustedDevice(user.id, extractIp(req), extractUserAgent(req));

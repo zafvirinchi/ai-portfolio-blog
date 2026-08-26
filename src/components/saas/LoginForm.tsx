@@ -20,7 +20,12 @@ export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createSupabaseBrowserClient();
-  const redirectTo = searchParams.get("redirect") || "/settings/organization";
+  // Phase 23 Milestone 3 — kept as the RAW explicit param (no flat
+  // fallback) so handleOAuth only ever forwards a real, explicit
+  // redirect to /auth/callback; when absent, the callback route computes
+  // its own persona-aware default (see finish() below for the
+  // password-login equivalent) instead of this always overriding it.
+  const explicitRedirect = searchParams.get("redirect") || undefined;
 
   const [step, setStep] = useState<Step>("credentials");
   const [error, setError] = useState("");
@@ -33,8 +38,13 @@ export default function LoginForm() {
   const [code, setCode] = useState("");
   const [trustDevice, setTrustDevice] = useState(false);
 
-  function finish() {
-    router.push(redirectTo);
+  // Phase 23 Milestone 3 — an explicit ?redirect= always wins; absent
+  // one, the server tells us the persona-correct default (RECRUITER ->
+  // /recruiter, else /resume-analyzer — persona-service.ts's
+  // resolveDefaultLandingPath(), computed once inside finalizeLogin())
+  // rather than this component guessing from a flat client-side default.
+  function finish(serverDefaultLandingPath?: string) {
+    router.push(searchParams.get("redirect") || serverDefaultLandingPath || "/resume-analyzer");
     router.refresh();
   }
 
@@ -66,7 +76,7 @@ export default function LoginForm() {
         return;
       }
 
-      finish();
+      finish(data.defaultLandingPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -90,7 +100,7 @@ export default function LoginForm() {
         throw new Error(data.error || "Verification failed");
       }
 
-      finish();
+      finish(data.defaultLandingPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
@@ -132,7 +142,7 @@ export default function LoginForm() {
 
   async function handleOAuth(provider: OAuthProviderId) {
     setError("");
-    const { error: oauthError } = await signInWithOAuth(supabase, provider, redirectTo);
+    const { error: oauthError } = await signInWithOAuth(supabase, provider, explicitRedirect);
     if (oauthError) setError(oauthError.message);
   }
 

@@ -55,12 +55,15 @@ export function isRecruiter(roles: PlatformRole[]): boolean {
 
 /**
  * Grants/revokes are additive-only here (no removal helper yet — not
- * needed until an admin UI exists, Phase 18 M2+) and always require the
- * CALLER to already be resolved as ADMIN — enforced by every caller of
- * this function (entitlement-service.ts), never by this function
- * itself, since it has no way to know who's asking without threading a
- * second userId through every call. Never exposed to a client-facing
- * route in this milestone.
+ * needed until an admin UI exists, Phase 18 M2+). Two distinct callers
+ * are safe: (1) an ADMIN assigning ANY role to ANY target user
+ * (platform-admin-service.ts, gated by requirePlatformAdmin() at the
+ * route layer), and (2) a signed-in user self-service-opting themselves
+ * into RECRUITER ONLY, never any other role, via
+ * activateRecruiterPersona() below (Phase 23 Milestone 3) — this
+ * function itself still never checks who's asking, since it has no way
+ * to without threading a second userId through every call; each caller
+ * is individually responsible for its own authorization scope.
  */
 export async function setPlatformRoles(userId: string, roles: PlatformRole[]): Promise<void> {
   const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
@@ -72,6 +75,42 @@ export async function setPlatformRoles(userId: string, roles: PlatformRole[]): P
   }
 
   console.log(`${LOG_PREFIX} Roles Updated`, { userId, roles });
+}
+
+/**
+ * Phase 23 Milestone 3 — audit finding: there was no self-service path
+ * to ever acquire the RECRUITER role. recruiter_id === auth.users.id
+ * (recruiter-auth.ts) so any signed-in user can already reach /recruiter
+ * and its GET/list routes, but every recruiter.* requireFeature() check
+ * (create job, import candidates, match, evaluate, export, ...) resolves
+ * NONE for a JOB_SEEKER-only account, because resolveEffectivePlans()
+ * only ever considers roles the user already has — and the ONLY existing
+ * way to add RECRUITER was platform-admin-service.ts's assignPlatformRole(),
+ * itself only reachable via an ADMIN-gated route. That left every
+ * self-signed-up recruiter (and even a successful Stripe checkout for a
+ * RECRUITER plan — the subscription would be paid for but never
+ * consulted, since resolveEffectivePlans() never looks at a role absent
+ * from the user's own roles array) with no way to ever use the
+ * Recruiter Workspace. This is the one, deliberately narrow, self-
+ * service exception: additive-only, idempotent, and hardcoded to
+ * RECRUITER — never accepts a role from a caller, so it can never be
+ * used to self-grant ADMIN or anything else.
+ */
+export async function activateRecruiterPersona(userId: string): Promise<PlatformRole[]> {
+  const current = await resolvePlatformRoles(userId);
+  if (isRecruiter(current)) return current;
+
+  const updated: PlatformRole[] = [...current, "RECRUITER"];
+  await setPlatformRoles(userId, updated);
+  console.log(`${LOG_PREFIX} Recruiter Persona Activated`, { userId });
+
+  return updated;
+}
+
+/** Phase 23 Milestone 3 — the one place every login-completion path (finalizeLogin()) decides where a newly authenticated session should land absent an explicit ?redirect=. RECRUITER (with or without JOB_SEEKER too) goes to the Recruiter Workspace; everyone else (including ADMIN-only, which keeps reaching /admin via its own existing nav/URL, unchanged) lands on the Job Seeker tools. */
+export async function resolveDefaultLandingPath(userId: string): Promise<string> {
+  const roles = await resolvePlatformRoles(userId);
+  return isRecruiter(roles) ? "/recruiter" : "/resume-analyzer";
 }
 
 /**

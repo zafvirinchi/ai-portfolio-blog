@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: result.error ?? "Login failed" }, { status: 401 });
     }
 
-    return NextResponse.json({ mfaRequired: result.mfaRequired, factorId: result.factorId, challengeId: result.challengeId });
+    return NextResponse.json({ mfaRequired: result.mfaRequired, factorId: result.factorId, challengeId: result.challengeId, defaultLandingPath: result.defaultLandingPath });
   } catch (error) {
     console.error("[auth] Login route failed", error);
 

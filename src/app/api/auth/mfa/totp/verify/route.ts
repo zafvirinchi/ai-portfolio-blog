@@ -24,16 +24,17 @@ export async function POST(req: Request) {
     await verifyTotp(supabase, body.factorId, challengeId, body.code);
 
     let backupCodes: string[] | undefined;
+    let defaultLandingPath: string | undefined;
 
     if (body.context === "enroll") {
       backupCodes = await generateBackupCodes(user.id);
       await auditAuth.record(req, { action: "MFA Enabled", userId: user.id, objectType: "totp_factor", objectId: body.factorId });
       console.log("[auth] MFA Enabled", { userId: user.id });
     } else {
-      await finalizeLogin(req, user.id);
+      ({ defaultLandingPath } = await finalizeLogin(req, user.id));
     }
 
-    const response = NextResponse.json({ success: true, backupCodes });
+    const response = NextResponse.json({ success: true, backupCodes, defaultLandingPath });
 
     if (body.trustDevice) {
       const token = await issueTrustedDevice(user.id, extractIp(req), extractUserAgent(req));

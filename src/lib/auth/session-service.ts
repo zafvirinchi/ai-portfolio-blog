@@ -14,7 +14,24 @@ export const AUTH_SESSION_COOKIE_NAME = "auth_session_id";
 
 const TOUCH_STALE_MS = 5 * 60 * 1000;
 
-export async function record(userId: string, ipAddress: string | null, userAgent: string | null): Promise<AuthSession> {
+/**
+ * Records a new "Active Sessions" bookkeeping row for this login — never
+ * the real Supabase authentication itself (that has already succeeded,
+ * via Supabase's own httpOnly session cookies, before finalizeLogin()
+ * ever calls this). Fails OPEN (logs, returns null) rather than
+ * throwing, matching this same file's own touch()/list() siblings and
+ * security-service.ts's detectSuspiciousLogin()/audit-auth.ts's
+ * record() in the exact same call chain — this was the one outlier in
+ * that chain that instead threw and crashed the entire login (both
+ * password and OAuth) whenever auth_sessions doesn't exist yet
+ * (confirmed, live: Phase 22's own audits found this table genuinely
+ * unmigrated). A logging/bookkeeping failure must never break the
+ * feature it's observing (CLAUDE.md's own stated asymmetry) — losing
+ * this one login's entry in the Active Sessions list is an acceptable,
+ * purely cosmetic degradation; losing the ability to log in at all is
+ * not.
+ */
+export async function record(userId: string, ipAddress: string | null, userAgent: string | null): Promise<AuthSession | null> {
   const { data, error } = await supabaseAdmin
     .from("auth_sessions")
     .insert({ user_id: userId, ip_address: ipAddress, user_agent: userAgent })
@@ -22,7 +39,8 @@ export async function record(userId: string, ipAddress: string | null, userAgent
     .single();
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Session record failed, continuing login without active-session tracking`, error);
+    return null;
   }
 
   return { ...data, is_current: true } as AuthSession;
@@ -45,6 +63,7 @@ export async function touch(sessionId: string): Promise<void> {
   }
 }
 
+/** Fails OPEN (logs, returns an empty list) rather than throwing — the Active Sessions UI degrading to "no sessions to show" is preferable to breaking the settings page entirely over this bookkeeping table. */
 export async function list(userId: string, currentSessionId: string | null): Promise<AuthSession[]> {
   const { data, error } = await supabaseAdmin
     .from("auth_sessions")
@@ -54,13 +73,23 @@ export async function list(userId: string, currentSessionId: string | null): Pro
     .order("last_seen_at", { ascending: false });
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Session list failed, returning empty`, error);
+    return [];
   }
 
   return (data ?? []).map((row) => ({ ...row, is_current: row.id === currentSessionId }) as AuthSession);
 }
 
-/** Marks every other session revoked in our own bookkeeping table. The real Supabase-level revocation is done separately via auth.signOut({scope: "others"}) — see auth-service.ts logout(). */
+/**
+ * Marks every other session revoked in our own bookkeeping table. The
+ * real Supabase-level revocation is done separately via
+ * auth.signOut({scope: "others"}) — see auth-service.ts logout() and
+ * the password-change route, both of which call the real Supabase
+ * revocation BEFORE this. Fails OPEN (logs, returns) rather than
+ * throwing: a failure here means only our own bookkeeping table is out
+ * of sync, never that the real session survived — Supabase's own
+ * signOut() already ended it.
+ */
 export async function revokeOthers(userId: string, currentSessionId: string | null): Promise<void> {
   let query = supabaseAdmin.from("auth_sessions").update({ revoked_at: new Date().toISOString() }).eq("user_id", userId).is("revoked_at", null);
 
@@ -71,15 +100,16 @@ export async function revokeOthers(userId: string, currentSessionId: string | nu
   const { error } = await query;
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Session revoke-others bookkeeping failed (real Supabase revocation is unaffected)`, error);
   }
 }
 
+/** Same reasoning as revokeOthers() above — bookkeeping only, fails open. */
 export async function revoke(sessionId: string): Promise<void> {
   const { error } = await supabaseAdmin.from("auth_sessions").update({ revoked_at: new Date().toISOString() }).eq("id", sessionId);
 
   if (error) {
-    throw new Error(error.message);
+    console.error(`${LOG_PREFIX} Session revoke bookkeeping failed`, error);
   }
 }
 

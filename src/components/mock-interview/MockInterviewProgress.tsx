@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
 import { getRecentSessionIds } from "@/lib/ai/mock-interview/practice-history-store";
 import { READINESS_RECOMMENDATION_COPY } from "./readiness-presentation";
 import type { CategoryProgress, InterviewProgress, ProgressArea, Trend, TopicProgress } from "@/lib/ai/mock-interview/interview-progress";
@@ -89,6 +91,7 @@ type LoadState =
   | { status: "loading" }
   | { status: "empty" }
   | { status: "error"; message: string }
+  | { status: "entitlement"; info: EntitlementErrorInfo }
   | { status: "loaded"; progress: InterviewProgress; recentIds: string[] };
 
 export default function MockInterviewProgress({ resumeId, jdMatchId, prepId, latestSessionId, onViewLatestDebrief }: Props) {
@@ -115,7 +118,18 @@ export default function MockInterviewProgress({ resumeId, jdMatchId, prepId, lat
       fetch(`/api/ai/mock-interview/progress?${params.toString()}`)
         .then(async (response) => {
           const data = await response.json();
-          if (!response.ok) throw new Error(data.error || "Failed to load practice progress");
+          if (!response.ok) {
+            // Phase 23 Milestone 5 — this route is gated by
+            // requireFeature(..., "interview.progress") (NONE on the
+            // Free plan) — a rejection here was previously shown as a
+            // generic error string instead of UpgradePrompt.
+            const entitlement = readEntitlementError(data, "Failed to load practice progress");
+            if (entitlement) {
+              if (!cancelled) setState({ status: "entitlement", info: entitlement });
+              return;
+            }
+            throw new Error(data.error || "Failed to load practice progress");
+          }
           if (!cancelled) setState({ status: "loaded", progress: data, recentIds: ids });
         })
         .catch((err) => {
@@ -149,6 +163,20 @@ export default function MockInterviewProgress({ resumeId, jdMatchId, prepId, lat
 
   if (state.status === "loading") {
     return <div role="status" className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-sm">Loading your practice progress...</div>;
+  }
+
+  if (state.status === "entitlement") {
+    return (
+      <UpgradePrompt
+        featureLabel="Practice Progress"
+        code={state.info.code}
+        featureId={state.info.featureId}
+        message={state.info.message}
+        limit={state.info.limit}
+        used={state.info.used}
+        period={state.info.period}
+      />
+    );
   }
 
   if (state.status === "error") {

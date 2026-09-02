@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Blog } from "@/types/blog";
+import { slugify } from "@/lib/utils/slugify";
 
 type Props = {
   blog?: Blog | null;
@@ -11,6 +12,42 @@ type Props = {
 export default function BlogForm({ blog }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [coverImage, setCoverImage] = useState(blog?.cover_image || "");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+
+  async function handleCoverImageUpload(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadingImage(true);
+    setImageUploadError(null);
+
+    try {
+      const uploadData = new FormData();
+      uploadData.append("file", file);
+
+      const response = await fetch("/api/admin/blogs/upload-image", {
+        method: "POST",
+        body: uploadData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setImageUploadError(result.error || "Image upload failed.");
+        return;
+      }
+
+      setCoverImage(result.url);
+    } catch (error) {
+      console.error("Cover image upload error:", error);
+      setImageUploadError("Image upload failed.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -19,10 +56,9 @@ export default function BlogForm({ blog }: Props) {
     const formData = new FormData(event.currentTarget);
 
     const title = String(formData.get("title") || "").trim();
-    const slug = String(formData.get("slug") || "").trim();
+    const slug = slugify(String(formData.get("slug") || ""));
     const excerpt = String(formData.get("excerpt") || "").trim();
     const content = String(formData.get("content") || "").trim();
-    const coverImage = String(formData.get("cover_image") || "").trim();
     const tagsValue = String(formData.get("tags") || "").trim();
 
     const payload = {
@@ -30,7 +66,7 @@ export default function BlogForm({ blog }: Props) {
       slug,
       excerpt: excerpt || null,
       content,
-      cover_image: coverImage || null,
+      cover_image: coverImage.trim() || null,
       tags: tagsValue
         ? tagsValue
             .split(",")
@@ -138,12 +174,39 @@ export default function BlogForm({ blog }: Props) {
       <div>
         <label className="mb-2 block font-medium">Cover Image</label>
 
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="cursor-pointer rounded-xl border bg-gray-50 px-4 py-3 font-medium hover:bg-gray-100">
+            {uploadingImage ? "Uploading..." : "Upload Image"}
+
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleCoverImageUpload}
+              disabled={uploadingImage}
+              className="hidden"
+            />
+          </label>
+
+          {coverImage && (
+            <img
+              src={coverImage}
+              alt="Cover preview"
+              className="h-16 w-28 rounded-lg border object-cover"
+            />
+          )}
+        </div>
+
+        {imageUploadError && (
+          <p className="mt-2 text-sm text-red-600">{imageUploadError}</p>
+        )}
+
         <input
           type="text"
           name="cover_image"
-          defaultValue={blog?.cover_image || ""}
-          placeholder="/images/blog/java-memory.png"
-          className="w-full rounded-xl border px-4 py-3 outline-none focus:border-blue-500"
+          value={coverImage}
+          onChange={(event) => setCoverImage(event.target.value)}
+          placeholder="/images/blog/java-memory.png or upload an image above"
+          className="mt-3 w-full rounded-xl border px-4 py-3 outline-none focus:border-blue-500"
         />
       </div>
 

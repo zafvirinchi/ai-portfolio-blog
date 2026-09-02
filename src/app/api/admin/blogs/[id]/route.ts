@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminRoute } from "@/lib/billing/admin-api-guard";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { slugify } from "@/lib/utils/slugify";
 
 type Params = {
   params: Promise<{
@@ -26,11 +27,20 @@ export async function PUT(req: Request, { params }: Params) {
       );
     }
 
+    const normalizedSlug = slugify(slug);
+
+    if (!normalizedSlug) {
+      return NextResponse.json(
+        { error: "Slug must contain at least one letter or number" },
+        { status: 400 }
+      );
+    }
+
     const { data, error } = await supabaseAdmin
       .from("blogs")
       .update({
         title,
-        slug,
+        slug: normalizedSlug,
         excerpt,
         content,
         cover_image,

@@ -8,8 +8,19 @@ type Params = {
   params: Promise<{ orgId: string }>;
 };
 
+// Phase 26 Org/Workspace Auth Closure — genuine defect fix: this GET had
+// NO authorization check at all, unlike POST below (same file), which
+// correctly gates on getTenantContext(). Reachable by a fully
+// unauthenticated caller, exposing an organization's full workspace list
+// for any orgId.
 export async function GET(_req: Request, { params }: Params) {
   const { orgId } = await params;
+
+  const context = await getTenantContext();
+  if (!context || context.organizationId !== orgId) {
+    return NextResponse.json({ error: "Not authorized for this organization" }, { status: 403 });
+  }
+
   const workspaces = await workspaceService.list(orgId);
 
   return NextResponse.json(workspaces);

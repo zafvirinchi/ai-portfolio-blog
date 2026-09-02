@@ -9,8 +9,27 @@ type Params = {
   params: Promise<{ orgId: string }>;
 };
 
+// Phase 26 Org/Workspace Auth Closure — genuine, critical defect fix:
+// this GET had NO authorization check at all, unlike POST below (same
+// file), which correctly gates on getTenantContext() + requirePermission.
+// OrganizationInvitation includes the raw `token` field (organization-
+// types.ts) — the bearer secret that /api/saas/invitations/[token]/accept
+// accepts from ANY authenticated user, with no check that the accepting
+// user's email matches the invitation's. Before this fix, an
+// unauthenticated caller who knew or guessed an orgId could list every
+// pending invitation for that org — email AND token included — then use
+// any harvested token to join that organization at the invited role.
+// This is a full, unauthenticated organization-infiltration chain, not
+// merely an information leak. Fixed with the same guard the sibling POST
+// already uses.
 export async function GET(_req: Request, { params }: Params) {
   const { orgId } = await params;
+
+  const context = await getTenantContext();
+  if (!context || context.organizationId !== orgId) {
+    return NextResponse.json({ error: "Not authorized for this organization" }, { status: 403 });
+  }
+
   const invitations = await membershipService.listInvitations(orgId);
 
   return NextResponse.json(invitations);

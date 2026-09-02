@@ -9,7 +9,7 @@ import { JobDescription } from "../../job-description/jd-schema";
 function baseDocument(): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null },
+    personalInformation: { name: "Jane Doe", headline: null, email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null },
     sections: [
       {
         id: "summary-section",

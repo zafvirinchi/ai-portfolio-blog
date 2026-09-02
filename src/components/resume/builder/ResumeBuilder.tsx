@@ -5,6 +5,7 @@ import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 
 import type { DynamicResumeDocument, SectionType } from "@/lib/ai/resume-versions/dynamic/dynamic-resume-schema";
+import { containsPdfUnsafeCharacters } from "@/lib/ai/resume-versions/dynamic/dynamic-resume-render";
 import { getSectionDefinition } from "@/lib/ai/resume-versions/dynamic/section-registry";
 import { DEFAULT_TEMPLATE_SETTINGS, TemplateId, TemplateSettings, UpdateTemplateSettingsInput } from "@/lib/ai/resume-versions/templates/template-schema";
 import { resolveTemplateStyles } from "@/lib/ai/resume-versions/templates/template-styles";
@@ -220,6 +221,7 @@ export default function ResumeBuilder({ versionId }: { versionId: string }) {
                     <SortableItem key={section.id} id={section.id}>
                       {(dragHandleProps) => (
                         <SectionEditor
+                          versionId={versionId}
                           section={section}
                           dragHandleProps={dragHandleProps}
                           onRename={(title) => mutate(`/sections/${section.id}`, { method: "PATCH", body: JSON.stringify({ title }) })}
@@ -262,7 +264,7 @@ export default function ResumeBuilder({ versionId }: { versionId: string }) {
       </div>
 
       <div className="space-y-4 lg:sticky lg:top-6 lg:self-start">
-        <DownloadMenu versionId={versionId} atsFriendliness={resolvedStyles.atsFriendliness} />
+        <DownloadMenu versionId={versionId} atsFriendliness={resolvedStyles.atsFriendliness} hasPdfUnsafeCharacters={containsPdfUnsafeCharacters(document)} />
         <ResumePreview document={document} templateSettings={templateSettings} />
       </div>
     </div>

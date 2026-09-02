@@ -25,7 +25,11 @@ function headingBorder(styles: ResolvedTemplateStyles) {
   return { left: { style: BorderStyle.SINGLE, size: 24, color: hex(styles.accentHex), space: 8 } };
 }
 
-function sectionHeadingParagraph(section: RenderableSection, styles: ResolvedTemplateStyles): Paragraph[] {
+// Exported (Phase 25 Milestone 2) purely for direct unit testing —
+// same "extracted for testability" pattern already used elsewhere in
+// this codebase (e.g. rewrite-service.ts's buildCertificationsMessages).
+// Not otherwise used outside this file.
+export function sectionHeadingParagraph(section: RenderableSection, styles: ResolvedTemplateStyles): Paragraph[] {
   const paragraphs: Paragraph[] = [];
   const title = styles.sectionHeadingStyle === "underline" ? section.title : section.title.toUpperCase();
   const alignment = styles.sectionHeadingStyle === "centered-divider" ? AlignmentType.CENTER : AlignmentType.LEFT;
@@ -36,6 +40,18 @@ function sectionHeadingParagraph(section: RenderableSection, styles: ResolvedTem
       new Paragraph({
         alignment,
         border: headingBorder(styles),
+        // Phase 25 Milestone 2 — genuine defect fix: this paragraph
+        // previously carried only bold/color TextRun formatting, with
+        // no `heading:` property — visually bold, but structurally
+        // indistinguishable from plain body text. Word's own
+        // accessibility tooling (Navigation Pane, screen readers
+        // jumping by heading) and many resume-parsing ATS systems rely
+        // on the paragraph's actual style, not just bold formatting, to
+        // detect section boundaries. HEADING_1 is purely additive — the
+        // explicit TextRun formatting below still overrides the style's
+        // own defaults for bold/font/size/color, so visual output is
+        // unchanged; only the semantic structure is added.
+        heading: HeadingLevel.HEADING_1,
         children: [
           new TextRun({
             text: title,
@@ -104,6 +120,14 @@ export async function renderDynamicResumeDocx(document: DynamicResumeDocument, v
       heading: HeadingLevel.TITLE,
       children: [new TextRun({ text: personalInformation.name ?? "Candidate", font: styles.docxFontName, size: styles.sizes.name * 2, bold: true })],
     }),
+    ...(personalInformation.headline && personalInformation.headline.trim()
+      ? [
+          new Paragraph({
+            alignment: headerAlignment,
+            children: [new TextRun({ text: personalInformation.headline, bold: true, color: hex(styles.accentHex), font: styles.docxFontName, size: styles.sizes.heading * 2 })],
+          }),
+        ]
+      : []),
     ...(contactLine
       ? [new Paragraph({ alignment: headerAlignment, children: [new TextRun({ text: contactLine, color: "666666", font: styles.docxFontName, size: styles.sizes.body * 2 })] })]
       : []),

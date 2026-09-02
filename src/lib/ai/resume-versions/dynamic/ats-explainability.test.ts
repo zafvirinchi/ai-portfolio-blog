@@ -90,7 +90,7 @@ function emptyJd(overrides: Partial<JobDescription> = {}): JobDescription {
 function emptyDocument(sections: DynamicResumeDocument["sections"] = []): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null },
+    personalInformation: { name: "Jane Doe", headline: null, email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null },
     sections,
   };
 }
@@ -267,7 +267,7 @@ describe("computeSectionCompleteness", () => {
 
 describe("computeContactQuality", () => {
   it("reports exactly which fields are present, without requiring optional ones", () => {
-    const rows = computeContactQuality({ name: "Jane", email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null });
+    const rows = computeContactQuality({ name: "Jane", headline: null, email: "jane@example.com", phone: null, location: null, linkedin: null, github: null, website: null });
     expect(rows.find((r) => r.field === "email")?.present).toBe(true);
     expect(rows.find((r) => r.field === "github")?.present).toBe(false);
   });

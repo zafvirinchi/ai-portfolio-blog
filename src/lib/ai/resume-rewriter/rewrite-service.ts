@@ -166,6 +166,62 @@ function pickVariant(variants: TextVariant[], version?: VariantVersion): TextVar
   return variants.find((variant) => variant.version === (version ?? "A")) ?? variants[0];
 }
 
+/**
+ * Shared retry-once-then-fallback flow for variant lists (summary/careerObjective/single-bullet).
+ * Phase 25 Milestone 1 — extracted from RewriteService's own private
+ * method (it never touched `this`) so the new stateless AI-improve
+ * route (src/app/api/ai/resume/versions/[id]/ai-improve/route.ts) can
+ * reuse the exact same fabrication-guard/fallback behavior instead of
+ * re-implementing it. No behavior change for the existing ephemeral
+ * rewrite-session flow below, which now just calls this directly.
+ */
+export async function generateAndValidateVariants(
+  resume: Resume,
+  originalText: string,
+  generate: (correction?: string) => Promise<TextVariant[]>,
+  section: RewriteSection,
+  rejectedItems: PendingSectionRewrite["rejectedItems"]
+): Promise<TextVariant[]> {
+  let variants = await generate();
+  let invalid = variants.filter((variant) => !validateRewrite(originalText, variant.text, resume).valid);
+
+  if (invalid.length > 0) {
+    const violations = invalid.flatMap((variant) => validateRewrite(originalText, variant.text, resume).violations);
+    variants = await generate(violations.join("; "));
+    invalid = variants.filter((variant) => !validateRewrite(originalText, variant.text, resume).valid);
+  }
+
+  const valid = variants.filter((variant) => !invalid.includes(variant));
+
+  for (const variant of invalid) {
+    rejectedItems.push({
+      section,
+      originalText,
+      reason: validateRewrite(originalText, variant.text, resume).violations.join("; "),
+    });
+  }
+
+  console.log(`${LOG_PREFIX} Validation Passed`, { section, kept: valid.length, rejected: invalid.length });
+
+  if (valid.length > 0) return valid;
+
+  // Every variant failed validation even after a retry — never surface
+  // a hallucinated rewrite; fall back to the original text unchanged.
+  return [
+    {
+      version: "A",
+      text: originalText,
+      explanation: {
+        whyBetter: "Kept the original text — the rewrite couldn't be verified as fabrication-free.",
+        atsImprovements: [],
+        keywordsAdded: [],
+        readabilityImprovement: "none",
+        toneImprovement: "none",
+      },
+    },
+  ];
+}
+
 export class RewriteService {
   private readonly records = new Map<string, StoredRewriteRecord>();
 
@@ -297,7 +353,7 @@ export class RewriteService {
     };
 
     if (section === "summary" || section === "careerObjective") {
-      pending.variants = await this.generateAndValidateVariants(
+      pending.variants = await generateAndValidateVariants(
         resume,
         sectionState.current[0] ?? "",
         (correction) => generateSummaryVariants(resume, style, targetContext, section === "careerObjective", correction),
@@ -313,7 +369,7 @@ export class RewriteService {
       const originalText = sectionState.current[itemIndex];
       if (originalText === undefined) throw new Error(`No item at index ${itemIndex} in section "${section}".`);
 
-      const newVariants = await this.generateAndValidateVariants(
+      const newVariants = await generateAndValidateVariants(
         resume,
         originalText,
         (correction) => generateBulletVariants(resume, originalText, style, targetContext, correction),
@@ -385,54 +441,6 @@ export class RewriteService {
     this.save(record);
 
     return pending;
-  }
-
-  /** Shared retry-once-then-fallback flow for variant lists (summary/careerObjective/single-bullet). */
-  private async generateAndValidateVariants(
-    resume: Resume,
-    originalText: string,
-    generate: (correction?: string) => Promise<TextVariant[]>,
-    section: RewriteSection,
-    rejectedItems: PendingSectionRewrite["rejectedItems"]
-  ): Promise<TextVariant[]> {
-    let variants = await generate();
-    let invalid = variants.filter((variant) => !validateRewrite(originalText, variant.text, resume).valid);
-
-    if (invalid.length > 0) {
-      const violations = invalid.flatMap((variant) => validateRewrite(originalText, variant.text, resume).violations);
-      variants = await generate(violations.join("; "));
-      invalid = variants.filter((variant) => !validateRewrite(originalText, variant.text, resume).valid);
-    }
-
-    const valid = variants.filter((variant) => !invalid.includes(variant));
-
-    for (const variant of invalid) {
-      rejectedItems.push({
-        section,
-        originalText,
-        reason: validateRewrite(originalText, variant.text, resume).violations.join("; "),
-      });
-    }
-
-    console.log(`${LOG_PREFIX} Validation Passed`, { section, kept: valid.length, rejected: invalid.length });
-
-    if (valid.length > 0) return valid;
-
-    // Every variant failed validation even after a retry — never surface
-    // a hallucinated rewrite; fall back to the original text unchanged.
-    return [
-      {
-        version: "A",
-        text: originalText,
-        explanation: {
-          whyBetter: "Kept the original text — the rewrite couldn't be verified as fabrication-free.",
-          atsImprovements: [],
-          keywordsAdded: [],
-          readabilityImprovement: "none",
-          toneImprovement: "none",
-        },
-      },
-    ];
   }
 
   private async generateAndValidateItems(

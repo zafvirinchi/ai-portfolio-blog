@@ -113,6 +113,10 @@ export default defineConfig({
       "src/app/api/ai/recruitment/emails/follow-up/route.test.ts",
       // Phase 24 Milestone 2 — contact form durability fix.
       "src/app/api/contact/route.test.ts",
+      // Phase 25 Milestone 1 — Resume Template & AI Resume Builder Foundation.
+      "src/app/api/ai/resume/versions/[id]/ai-improve/route.test.ts",
+      // Phase 25 Milestone 3 — Resume Builder End-to-End Audit.
+      "src/lib/billing/export-download.test.ts",
       // Phase 26 Milestone 1 — Production SaaS Journey Audit: unauthenticated
       // cross-tenant organization/workspace member exposure fixes.
       "src/app/api/saas/organizations/[orgId]/members/route.test.ts",

@@ -107,6 +107,11 @@ export default function ResumePreview({ document, templateSettings = DEFAULT_TEM
         <h1 className="break-words font-bold text-slate-900" style={{ fontSize: styles.sizes.name }}>
           {personalInformation.name ?? "Candidate"}
         </h1>
+        {personalInformation.headline && (
+          <p className="break-words mt-0.5 font-medium" style={{ fontSize: styles.sizes.heading, color: styles.accentHex }}>
+            {personalInformation.headline}
+          </p>
+        )}
         {contactLine && (
           <p className="break-words mt-1 text-slate-500" style={{ fontSize: styles.sizes.body - 1 }}>
             {contactLine}

@@ -81,6 +81,8 @@ export type ResumeSection = z.infer<typeof resumeSectionSchema>;
 
 export const dynamicPersonalInformationSchema = z.object({
   name: z.string().nullable(),
+  /** A short professional title/tagline shown under the name (e.g. "Senior Backend Engineer") — distinct from the SUMMARY section's longer prose. No legacy-Resume equivalent (see resume-migration.ts), so it's always null for a version migrated from before this field existed. */
+  headline: z.string().nullable(),
   email: z.string().nullable(),
   phone: z.string().nullable(),
   location: z.string().nullable(),
@@ -126,6 +128,7 @@ const optionalTrimmedString = z
 
 export const updatePersonalInformationSchema = z.object({
   name: optionalTrimmedString,
+  headline: optionalTrimmedString,
   email: optionalTrimmedString,
   phone: optionalTrimmedString,
   location: optionalTrimmedString,

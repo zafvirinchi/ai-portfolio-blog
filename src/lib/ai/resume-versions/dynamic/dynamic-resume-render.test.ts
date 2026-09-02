@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatFieldValue, getEntryPresentation, isFieldEmpty, prepareForRender } from "./dynamic-resume-render";
+import { containsPdfUnsafeCharacters, formatFieldValue, getEntryPresentation, isFieldEmpty, prepareForRender } from "./dynamic-resume-render";
 import { DynamicResumeDocument, DYNAMIC_RESUME_SCHEMA_VERSION, ResumeEntry, ResumeSection } from "./dynamic-resume-schema";
 
 function entry(overrides: Partial<ResumeEntry> = {}): ResumeEntry {
@@ -14,7 +14,7 @@ function section(overrides: Partial<ResumeSection> = {}): ResumeSection {
 function document(sections: ResumeSection[]): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+    personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
     sections,
   };
 }
@@ -194,6 +194,45 @@ describe("getEntryPresentation", () => {
     const { heading, lines } = getEntryPresentation(renderableEntry);
     expect(heading).toEqual({ label: "Title", value: "Enterprise Modernization" });
     expect(lines).toEqual([{ label: "Impact", value: "Reduced deployment time by 40%" }]);
+  });
+});
+
+// Phase 25 Milestone 2 — regression coverage for a genuine, previously
+// silent defect: pdfkit's built-in fonts (template-styles.ts's
+// PDF_FONT_MAP) have no glyph coverage outside Latin-1, so a candidate
+// name/headline/section content using a non-Latin script would
+// silently render as missing glyphs in the exported PDF with no
+// warning anywhere. containsPdfUnsafeCharacters() detects this so the
+// UI can surface an honest warning instead.
+describe("containsPdfUnsafeCharacters", () => {
+  it("returns false for plain ASCII content", () => {
+    const doc = document([section({ entries: [entry({ fields: { jobTitle: "Software Engineer", company: "Acme Corp" } })] })]);
+    expect(containsPdfUnsafeCharacters(doc)).toBe(false);
+  });
+
+  it("returns false for accented Latin-1 characters (within pdfkit's actual font coverage)", () => {
+    const doc: DynamicResumeDocument = { ...document([]), personalInformation: { ...document([]).personalInformation, name: "José García" } };
+    expect(containsPdfUnsafeCharacters(doc)).toBe(false);
+  });
+
+  it("returns true when the name contains a non-Latin script (e.g. Arabic — relevant to the GCC-oriented template)", () => {
+    const doc: DynamicResumeDocument = { ...document([]), personalInformation: { ...document([]).personalInformation, name: "أحمد" } };
+    expect(containsPdfUnsafeCharacters(doc)).toBe(true);
+  });
+
+  it("returns true when the headline contains CJK characters", () => {
+    const doc: DynamicResumeDocument = { ...document([]), personalInformation: { ...document([]).personalInformation, headline: "ソフトウェアエンジニア" } };
+    expect(containsPdfUnsafeCharacters(doc)).toBe(true);
+  });
+
+  it("checks rendered entry content, not just personalInformation", () => {
+    const doc = document([section({ entries: [entry({ fields: { jobTitle: "工程师", company: "Acme" } })] })]);
+    expect(containsPdfUnsafeCharacters(doc)).toBe(true);
+  });
+
+  it("ignores content in hidden/invisible sections and entries — nothing that won't actually render", () => {
+    const doc = document([section({ visible: false, entries: [entry({ fields: { jobTitle: "工程师" } })] })]);
+    expect(containsPdfUnsafeCharacters(doc)).toBe(false);
   });
 });
 

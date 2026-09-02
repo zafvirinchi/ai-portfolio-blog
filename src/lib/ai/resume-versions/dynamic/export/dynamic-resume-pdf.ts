@@ -199,6 +199,15 @@ export function renderDynamicResumePdf(document: DynamicResumeDocument, versionN
       .fillColor("#111827")
       .text(personalInformation.name ?? "Candidate", { align: styles.headerAlign, width: contentWidth });
 
+    if (personalInformation.headline && personalInformation.headline.trim()) {
+      doc
+        .font(styles.pdfFont.bold)
+        .fontSize(styles.sizes.heading)
+        .fillColor(styles.accentHex)
+        .text(personalInformation.headline, { align: styles.headerAlign, width: contentWidth });
+      doc.fillColor("#111827");
+    }
+
     const contactLine = [personalInformation.email, personalInformation.phone, personalInformation.location, personalInformation.linkedin, personalInformation.github, personalInformation.website]
       .filter((value): value is string => Boolean(value && value.trim()))
       .join("  ·  ");

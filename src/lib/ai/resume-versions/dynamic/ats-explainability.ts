@@ -352,7 +352,12 @@ export interface ContactQualityRow {
   present: boolean;
 }
 
-const CONTACT_FIELD_LABELS: Record<keyof DynamicPersonalInformation, string> = {
+// Phase 25 Milestone 1 — explicitly excludes "headline": it's a
+// positioning/content field (rendered in the resume header, like the
+// name), not a contact-quality signal in the same sense as
+// email/phone/linkedin/github/website, so it deliberately never
+// appears as a row here.
+const CONTACT_FIELD_LABELS: Record<Exclude<keyof DynamicPersonalInformation, "headline">, string> = {
   name: "Full Name",
   email: "Email",
   phone: "Phone",
@@ -363,7 +368,7 @@ const CONTACT_FIELD_LABELS: Record<keyof DynamicPersonalInformation, string> = {
 };
 
 export function computeContactQuality(personalInformation: DynamicPersonalInformation): ContactQualityRow[] {
-  return (Object.keys(CONTACT_FIELD_LABELS) as (keyof DynamicPersonalInformation)[]).map((field) => ({
+  return (Object.keys(CONTACT_FIELD_LABELS) as Exclude<keyof DynamicPersonalInformation, "headline">[]).map((field) => ({
     field,
     label: CONTACT_FIELD_LABELS[field],
     present: Boolean(personalInformation[field]?.trim()),

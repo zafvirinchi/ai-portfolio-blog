@@ -11,6 +11,7 @@ import EntryEditor from "./EntryEditor";
 import SortableItem, { type DragHandleProps } from "./SortableItem";
 
 export default function SectionEditor({
+  versionId,
   section,
   dragHandleProps,
   onRename,
@@ -29,6 +30,7 @@ export default function SectionEditor({
   onUpdateCustomField,
   onRemoveCustomField,
 }: {
+  versionId: string;
   section: ResumeSection;
   dragHandleProps?: DragHandleProps;
   onRename: (title: string) => void;
@@ -158,6 +160,7 @@ export default function SectionEditor({
                 <SortableItem key={entry.id} id={entry.id}>
                   {(entryDragHandleProps) => (
                     <EntryEditor
+                      versionId={versionId}
                       sectionType={section.type}
                       entry={entry}
                       dragHandleProps={entryDragHandleProps}

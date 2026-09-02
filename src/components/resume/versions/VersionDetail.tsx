@@ -5,12 +5,15 @@ import Link from "next/link";
 
 import type { ResumeVersionRecord, VersionComparison } from "@/lib/ai/resume-versions/resume-version-types";
 import { resumeScorer } from "@/lib/ai/resume/resume-score";
-import { toDynamicResumeDocument, checkResumeQuality, computeSectionCompleteness, computeContactQuality, buildQualityGateReport } from "@/lib/ai/resume-versions/dynamic";
+import { toDynamicResumeDocument, checkResumeQuality, computeSectionCompleteness, computeContactQuality, buildQualityGateReport, containsPdfUnsafeCharacters } from "@/lib/ai/resume-versions/dynamic";
 import type { IssueSeverity, ReadinessLevel } from "@/lib/ai/resume-versions/dynamic";
 import { DEFAULT_TEMPLATE_SETTINGS } from "@/lib/ai/resume-versions/templates/template-schema";
 import { resolveTemplateStyles } from "@/lib/ai/resume-versions/templates/template-styles";
 import ResumeBuilder from "@/components/resume/builder/ResumeBuilder";
 import ResumeAtsScore from "@/components/resume/ResumeAtsScore";
+import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
+import { EntitlementErrorInfo } from "@/lib/billing/entitlement-client-error";
+import { downloadExport } from "@/lib/billing/export-download";
 import JdOptimizationReview from "./JdOptimizationReview";
 
 const SECTION_STATUS_CLASSNAME: Record<string, string> = {
@@ -41,6 +44,36 @@ export default function VersionDetail({ versionId }: { versionId: string }) {
 
   const [restoring, setRestoring] = useState(false);
   const [masterComparison, setMasterComparison] = useState<VersionComparison | null>(null);
+
+  // Phase 25 Milestone 3 — genuine defect fix: this component's 4 export
+  // links (2 header quick-actions + 2 in the Quality Gate section, both
+  // pairs for the SAME versionId/format pair) previously used plain
+  // <a href> pointing straight at the export API route — the exact bug
+  // class already found and fixed elsewhere in this repo (most recently
+  // DownloadMenu.tsx in Milestone 2): a plain link can't intercept a
+  // JSON error response, so an expired session or a deleted/not-found
+  // version would navigate the whole tab to raw JSON. One shared
+  // handler/state set, since both button pairs trigger the identical
+  // underlying download action.
+  const [pendingExportFormat, setPendingExportFormat] = useState<string | null>(null);
+  const [exportEntitlementError, setExportEntitlementError] = useState<EntitlementErrorInfo | null>(null);
+  const [exportDownloadError, setExportDownloadError] = useState<string | null>(null);
+
+  async function handleExportDownload(format: "pdf" | "docx") {
+    setPendingExportFormat(format);
+    setExportEntitlementError(null);
+    setExportDownloadError(null);
+
+    const result = await downloadExport(`/api/ai/resume/versions/${versionId}/export?format=${format}`, `resume.${format}`);
+
+    if (result && "networkError" in result) {
+      setExportDownloadError(result.networkError);
+    } else if (result) {
+      setExportEntitlementError(result);
+    }
+
+    setPendingExportFormat(null);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,6 +187,13 @@ export default function VersionDetail({ versionId }: { versionId: string }) {
   // document/templateSettings/qualityReport already computed above for
   // the panels below it — no second scoring pass, no new LLM call.
   const qualityGate = buildQualityGateReport({ document: dynamicDocument, templateSettings: version.templateSettings ?? DEFAULT_TEMPLATE_SETTINGS, qualityReport });
+  // Phase 25 Milestone 3 — genuine defect fix: Milestone 2 added this
+  // same warning to the Builder tab's DownloadMenu.tsx, but this
+  // component's own, independent PDF/DOCX export buttons (header +
+  // Quality Gate section below) never got it — an incomplete fix, not a
+  // sufficient one, since this Overview tab is this page's DEFAULT tab
+  // and often the first place a user exports from.
+  const hasPdfUnsafeCharacters = containsPdfUnsafeCharacters(dynamicDocument);
 
   return (
     <div className="space-y-6">
@@ -169,12 +209,24 @@ export default function VersionDetail({ versionId }: { versionId: string }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <a href={`/api/ai/resume/versions/${versionId}/export?format=pdf`} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Download PDF
-          </a>
-          <a href={`/api/ai/resume/versions/${versionId}/export?format=docx`} className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Download DOCX
-          </a>
+          <button
+            type="button"
+            onClick={() => handleExportDownload("pdf")}
+            disabled={pendingExportFormat === "pdf"}
+            aria-label="Download resume as PDF"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pendingExportFormat === "pdf" ? "Downloading..." : "Download PDF"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExportDownload("docx")}
+            disabled={pendingExportFormat === "docx"}
+            aria-label="Download resume as DOCX"
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pendingExportFormat === "docx" ? "Downloading..." : "Download DOCX"}
+          </button>
           {/* Phase 17 Milestone 2 — only the opaque version id is ever passed; no resume content in the URL. */}
           <Link
             href={`/interview-preparation?resumeVersionId=${versionId}`}
@@ -198,6 +250,25 @@ export default function VersionDetail({ versionId }: { versionId: string }) {
           </Link>
         </div>
       </div>
+
+      {hasPdfUnsafeCharacters && (
+        <p className="text-xs text-amber-700">
+          ⚠ This resume contains characters (e.g. a non-Latin script) that may not display correctly in the PDF format. DOCX preserves them correctly.
+        </p>
+      )}
+
+      {exportEntitlementError && (
+        <UpgradePrompt
+          featureLabel="Resume Export"
+          code={exportEntitlementError.code}
+          featureId={exportEntitlementError.featureId}
+          message={exportEntitlementError.message}
+          limit={exportEntitlementError.limit}
+          used={exportEntitlementError.used}
+          period={exportEntitlementError.period}
+        />
+      )}
+      {!exportEntitlementError && exportDownloadError && <p className="text-sm font-semibold text-red-600">{exportDownloadError}</p>}
 
       <div className="flex gap-2 border-b border-slate-200">
         <button
@@ -439,22 +510,24 @@ export default function VersionDetail({ versionId }: { versionId: string }) {
         )}
 
         <div className="mt-5 flex flex-wrap gap-2">
-          <a
-            href={qualityGate.exportSafe ? `/api/ai/resume/versions/${versionId}/export?format=pdf` : undefined}
+          <button
+            type="button"
+            onClick={() => handleExportDownload("pdf")}
+            disabled={!qualityGate.exportSafe || pendingExportFormat === "pdf"}
             aria-label="Download resume as PDF"
-            aria-disabled={!qualityGate.exportSafe}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold ${qualityGate.exportSafe ? "bg-blue-600 text-white hover:bg-blue-700" : "cursor-not-allowed bg-slate-200 text-slate-400"}`}
+            className={`rounded-xl px-5 py-2.5 text-sm font-semibold ${qualityGate.exportSafe ? "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" : "cursor-not-allowed bg-slate-200 text-slate-400"}`}
           >
-            Download PDF
-          </a>
-          <a
-            href={qualityGate.exportSafe ? `/api/ai/resume/versions/${versionId}/export?format=docx` : undefined}
+            {pendingExportFormat === "pdf" ? "Downloading..." : "Download PDF"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExportDownload("docx")}
+            disabled={!qualityGate.exportSafe || pendingExportFormat === "docx"}
             aria-label="Download resume as DOCX"
-            aria-disabled={!qualityGate.exportSafe}
-            className={`rounded-xl px-5 py-2.5 text-sm font-semibold ${qualityGate.exportSafe ? "bg-blue-600 text-white hover:bg-blue-700" : "cursor-not-allowed bg-slate-200 text-slate-400"}`}
+            className={`rounded-xl px-5 py-2.5 text-sm font-semibold ${qualityGate.exportSafe ? "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" : "cursor-not-allowed bg-slate-200 text-slate-400"}`}
           >
-            Download DOCX
-          </a>
+            {pendingExportFormat === "docx" ? "Downloading..." : "Download DOCX"}
+          </button>
         </div>
         {!qualityGate.exportSafe && <p className="mt-2 text-xs font-semibold text-red-700">Export is disabled — this version&apos;s data failed validation. See the critical issues above.</p>}
       </div>

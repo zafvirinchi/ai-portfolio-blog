@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { DynamicResumeDocument, DYNAMIC_RESUME_SCHEMA_VERSION, ResumeEntry, ResumeSection } from "../dynamic-resume-schema";
 import { MARGIN_OPTIONS, PAGE_SIZES, TEMPLATE_IDS } from "../../templates/template-schema";
-import { renderDynamicResumeDocx } from "./dynamic-resume-docx";
+import { renderDynamicResumeDocx, sectionHeadingParagraph } from "./dynamic-resume-docx";
 import { renderDynamicResumePdf } from "./dynamic-resume-pdf";
+import { resolveTemplateStyles } from "../../templates/template-styles";
 
 // Phase 15 Milestone 4 — no test file existed for either export
 // renderer before this milestone, despite both already being
@@ -45,7 +46,7 @@ function countPdfPages(buffer: Buffer): number {
 function representativeDocument(): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: "jane@example.com", phone: "+1 555 0100", location: "Remote", linkedin: "linkedin.com/in/janedoe", github: null, website: null },
+    personalInformation: { name: "Jane Doe", headline: null, email: "jane@example.com", phone: "+1 555 0100", location: "Remote", linkedin: "linkedin.com/in/janedoe", github: null, website: null },
     sections: [
       section({
         id: "summary",
@@ -96,7 +97,7 @@ describe("renderDynamicResumePdf", () => {
   it("does not throw when every section is hidden or empty (a valid, if unusual, document)", async () => {
     const empty: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: null, headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [section({ id: "empty-section", entries: [] })],
     };
     const buffer = await renderDynamicResumePdf(empty, "Empty Version");
@@ -120,7 +121,7 @@ describe("renderDynamicResumePdf", () => {
   it("remains stable with 50 experience entries — no artificial content limit, and it spans multiple pages (Phase 15 Milestone 6, §15)", async () => {
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "experience",
@@ -140,7 +141,7 @@ describe("renderDynamicResumePdf", () => {
     const longUnbrokenToken = "https://" + "a".repeat(120) + ".example.com/credential/verify";
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "certifications",
@@ -158,7 +159,7 @@ describe("renderDynamicResumePdf", () => {
   it("a sidebar template whose own sidebar content overflows page 1 does not corrupt or throw — the fixed overlap bug (Phase 15 Milestone 6, §11)", async () => {
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "skills",
@@ -189,7 +190,7 @@ describe("renderDynamicResumeDocx", () => {
   it("does not throw when every section is hidden or empty (a valid, if unusual, document)", async () => {
     const empty: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: null, headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [section({ id: "empty-section", entries: [] })],
     };
     const buffer = await renderDynamicResumeDocx(empty, "Empty Version");
@@ -205,10 +206,40 @@ describe("renderDynamicResumeDocx", () => {
     }
   });
 
+  // Phase 25 Milestone 2 — regression test for a genuine defect: section
+  // headings previously carried only bold/color TextRun formatting, with
+  // no `heading:` property on the Paragraph, so every exported section
+  // title was visually bold but structurally plain body text — invisible
+  // to Word's Navigation Pane/screen readers and to any ATS parser that
+  // detects section boundaries via paragraph style rather than bold
+  // formatting. Inspects the Paragraph object's own plain, JSON-
+  // serializable internal structure (an existing capability of the
+  // `docx` package already used throughout this file) rather than
+  // introducing a new XML-unzipping test dependency, consistent with
+  // this file's own documented "no new testing dependency" decision
+  // (see the module doc comment above).
+  it("marks every section heading with a real Word heading style (Heading1), not just bold text", () => {
+    const renderableSection = {
+      id: "experience",
+      type: "EXPERIENCE" as const,
+      title: "Experience",
+      custom: false,
+      settings: { showTitle: true, showDivider: true },
+      entries: [],
+    };
+
+    for (const templateId of TEMPLATE_IDS) {
+      const styles = resolveTemplateStyles({ templateId, accentColor: "blue", fontFamily: "inter", fontSize: "standard", spacing: "standard", atsMode: false, pageLength: "auto", margin: "normal", pageSize: "letter" });
+      const [headingParagraph] = sectionHeadingParagraph(renderableSection, styles);
+
+      expect(JSON.stringify(headingParagraph)).toContain("Heading1");
+    }
+  });
+
   it("remains stable with 50 experience entries — no artificial content limit (Phase 15 Milestone 6, §15)", async () => {
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "experience",
@@ -227,7 +258,7 @@ describe("renderDynamicResumeDocx", () => {
     const longUnbrokenToken = "https://" + "a".repeat(120) + ".example.com/credential/verify";
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "certifications",
@@ -245,7 +276,7 @@ describe("renderDynamicResumeDocx", () => {
   it("a heavy sidebar template's content renders successfully (Phase 15 Milestone 6, §11)", async () => {
     const document: DynamicResumeDocument = {
       schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-      personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+      personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
       sections: [
         section({
           id: "skills",

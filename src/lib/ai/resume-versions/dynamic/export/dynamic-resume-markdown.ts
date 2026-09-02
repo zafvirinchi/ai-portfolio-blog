@@ -21,6 +21,10 @@ export function renderDynamicResumeMarkdown(document: DynamicResumeDocument, ver
 
   const lines: string[] = [`# ${personalInformation.name ?? "Candidate"}`];
 
+  if (personalInformation.headline && personalInformation.headline.trim()) {
+    lines.push(`**${personalInformation.headline}**`);
+  }
+
   const contactLine = [personalInformation.email, personalInformation.phone, personalInformation.location, personalInformation.linkedin, personalInformation.github, personalInformation.website]
     .filter((value): value is string => Boolean(value && value.trim()))
     .join(" · ");

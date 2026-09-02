@@ -9,6 +9,7 @@ import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
 import RewriteSectionCard from "@/components/resume-rewriter/RewriteSectionCard";
 import RewriteStylePicker from "@/components/resume-rewriter/RewriteStylePicker";
 import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
+import { downloadExport } from "@/lib/billing/export-download";
 import type { RewriteSection, RewriteStyle } from "@/lib/ai/resume-rewriter/rewrite-schema";
 import type { RewriteRecord } from "@/lib/ai/resume-rewriter/rewrite-types";
 
@@ -34,6 +35,33 @@ function ResumeRewriterContent() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
+
+  // Phase 25 Milestone 3 — genuine defect fix: the download buttons below
+  // previously used plain <a href> pointing straight at the export API
+  // route — the exact bug class already found and fixed elsewhere in this
+  // repo (most recently VersionDetail.tsx/DownloadMenu.tsx/
+  // ResumeOptimizerPanel.tsx in Milestones 2-3): a plain link can't
+  // intercept a JSON error response (this ephemeral, session-keyed export
+  // 404s once the 2-hour rewrite session expires), so it would navigate
+  // the whole tab to raw JSON instead of showing an error inline.
+  const [pendingDownloadFormat, setPendingDownloadFormat] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleDownload(format: string) {
+    if (!record) return;
+    setPendingDownloadFormat(format);
+    setDownloadError(null);
+
+    const result = await downloadExport(`/api/ai/resume-rewriter/${record.rewriteId}/export?format=${format}`, `resume.${format === "markdown" ? "md" : format}`);
+
+    if (result && "networkError" in result) {
+      setDownloadError(result.networkError);
+    } else if (result) {
+      setDownloadError(result.message);
+    }
+
+    setPendingDownloadFormat(null);
+  }
 
   async function refresh(rewriteId: string) {
     const response = await fetch(`/api/ai/resume-rewriter/${rewriteId}`);
@@ -238,18 +266,22 @@ function ResumeRewriterContent() {
                 Optimize my LinkedIn
               </Link>
               {(["markdown", "pdf", "docx", "html"] as const).map((format) => (
-                <a
+                <button
                   key={format}
-                  href={`/api/ai/resume-rewriter/${record.rewriteId}/export?format=${format}`}
-                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  type="button"
+                  onClick={() => handleDownload(format)}
+                  disabled={pendingDownloadFormat === format}
+                  aria-label={`Download resume as ${format === "markdown" ? "Markdown" : format.toUpperCase()}`}
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {format === "markdown" ? "Markdown" : format.toUpperCase()}
-                </a>
+                  {pendingDownloadFormat === format ? "Downloading..." : format === "markdown" ? "Markdown" : format.toUpperCase()}
+                </button>
               ))}
             </div>
           </div>
 
           {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+          {downloadError && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{downloadError}</div>}
 
           {SECTION_LABELS.map(({ section, label }) => (
             <RewriteSectionCard

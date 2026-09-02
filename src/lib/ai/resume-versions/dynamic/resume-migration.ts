@@ -118,6 +118,7 @@ export function toDynamicResumeDocument(resume: Resume): DynamicResumeDocument {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
     personalInformation: {
       name: resume.contact.name,
+      headline: null,
       email: resume.contact.email,
       phone: resume.contact.phone,
       location: resume.contact.location,
@@ -236,8 +237,13 @@ export function fromDynamicResumeDocument(document: DynamicResumeDocument, previ
     else skills.push(...values);
   }
 
+  // Destructured explicitly (not a blanket spread) so `headline` — a
+  // dynamic-document-only field with no legacy Resume.contact slot —
+  // never rides along onto the legacy shape.
+  const { name, email, phone, location, linkedin, github, website } = document.personalInformation;
+
   return {
-    contact: { ...document.personalInformation },
+    contact: { name, email, phone, location, linkedin, github, website },
     summary,
     skills,
     technicalSkills,

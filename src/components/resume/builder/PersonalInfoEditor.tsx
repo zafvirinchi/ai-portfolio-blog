@@ -11,6 +11,7 @@ import type { DynamicPersonalInformation } from "@/lib/ai/resume-versions/dynami
 // commit convention as EntryEditor's fields.
 const FIELDS: { key: keyof DynamicPersonalInformation; label: string; placeholder?: string }[] = [
   { key: "name", label: "Full Name" },
+  { key: "headline", label: "Headline", placeholder: "e.g. Senior Backend Engineer" },
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
   { key: "location", label: "Location" },

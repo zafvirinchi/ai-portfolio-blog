@@ -28,7 +28,7 @@ import { DynamicResumeDocument, DYNAMIC_RESUME_SCHEMA_VERSION } from "./dynamic-
 function emptyDocument(): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+    personalInformation: { name: "Jane Doe", headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
     sections: [],
   };
 }

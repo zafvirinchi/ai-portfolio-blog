@@ -4,6 +4,7 @@ import { ReactNode, useState } from "react";
 
 import UpgradePrompt from "@/components/billing/platform/UpgradePrompt";
 import { EntitlementErrorInfo, readEntitlementError } from "@/lib/billing/entitlement-client-error";
+import { downloadExport } from "@/lib/billing/export-download";
 import type {
   ChangedBullet,
   RemovedItem,
@@ -101,6 +102,32 @@ export default function ResumeOptimizerPanel({ jdMatchId }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [entitlementError, setEntitlementError] = useState<EntitlementErrorInfo | null>(null);
 
+  // Phase 25 Milestone 3 — genuine defect fix: the download buttons below
+  // previously used plain <a href> pointing straight at the export API
+  // route — the exact bug class already found and fixed elsewhere in this
+  // repo (most recently VersionDetail.tsx/DownloadMenu.tsx in Milestones
+  // 2-3): a plain link can't intercept a JSON error response (this
+  // ephemeral, session-keyed export 404s once the 2-hour result expires),
+  // so it would navigate the whole tab to raw JSON instead of showing an
+  // error inline.
+  const [pendingDownloadFormat, setPendingDownloadFormat] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  async function handleDownload(format: string) {
+    setPendingDownloadFormat(format);
+    setDownloadError(null);
+
+    const result = await downloadExport(`/api/ai/resume/jd-match/${jdMatchId}/optimize/export?format=${format}`, `optimized-resume.${format === "markdown" ? "md" : format}`);
+
+    if (result && "networkError" in result) {
+      setDownloadError(result.networkError);
+    } else if (result) {
+      setDownloadError(result.message);
+    }
+
+    setPendingDownloadFormat(null);
+  }
+
   async function handleGenerate() {
     setLoading(true);
     setError(null);
@@ -189,16 +216,22 @@ export default function ResumeOptimizerPanel({ jdMatchId }: Props) {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <p className="text-sm font-semibold text-slate-700">Download your optimized resume</p>
-        <div className="flex gap-2">
-          {(["markdown", "pdf", "docx"] as const).map((format) => (
-            <a
-              key={format}
-              href={`/api/ai/resume/jd-match/${jdMatchId}/optimize/export?format=${format}`}
-              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              {format === "markdown" ? "Markdown" : format.toUpperCase()}
-            </a>
-          ))}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex gap-2">
+            {(["markdown", "pdf", "docx"] as const).map((format) => (
+              <button
+                key={format}
+                type="button"
+                onClick={() => handleDownload(format)}
+                disabled={pendingDownloadFormat === format}
+                aria-label={`Download optimized resume as ${format === "markdown" ? "Markdown" : format.toUpperCase()}`}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {pendingDownloadFormat === format ? "Downloading..." : format === "markdown" ? "Markdown" : format.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          {downloadError && <p className="text-xs font-semibold text-red-600">{downloadError}</p>}
         </div>
       </div>
 

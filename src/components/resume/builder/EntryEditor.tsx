@@ -5,8 +5,19 @@ import { useState } from "react";
 import type { CustomField, FieldValue, ResumeEntry, SectionType } from "@/lib/ai/resume-versions/dynamic/dynamic-resume-schema";
 import { getSectionDefinition, type FieldDefinition } from "@/lib/ai/resume-versions/dynamic/section-registry";
 
+import AiImproveButton from "./AiImproveButton";
+import AiImproveSkillsButton from "./AiImproveSkillsButton";
 import ArrayFieldEditor from "./ArrayFieldEditor";
 import type { DragHandleProps } from "./SortableItem";
+
+// Section types whose textarea field maps 1:1 onto the /ai-improve
+// route's "section" literal (lowercase match) — the only sections with
+// a single free-text field the AI-improve engine can meaningfully
+// target. CERTIFICATIONS has no textarea field in the registry
+// (nothing to improve); SKILLS gets its own dedicated
+// AiImproveSkillsButton instead (see below), since its suggestion
+// shape is categorized groups, not a single rewritten string.
+const AI_IMPROVABLE_TEXTAREA_SECTIONS: SectionType[] = ["SUMMARY", "EXPERIENCE", "PROJECTS", "ACHIEVEMENTS"];
 
 // Generic, registry-driven entry editor — renders one <input>/<textarea>/
 // checkbox/chip-list per field the section-registry declares for this
@@ -119,6 +130,7 @@ function CustomFieldRow({
 }
 
 export default function EntryEditor({
+  versionId,
   sectionType,
   entry,
   dragHandleProps,
@@ -131,6 +143,7 @@ export default function EntryEditor({
   onUpdateCustomField,
   onRemoveCustomField,
 }: {
+  versionId: string;
   sectionType: SectionType;
   entry: ResumeEntry;
   dragHandleProps?: DragHandleProps;
@@ -196,21 +209,41 @@ export default function EntryEditor({
 
       {definition.entryFields.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
-          {definition.entryFields.map((field) => (
-            <div key={field.key} className={field.type === "textarea" || field.type === "list" ? "sm:col-span-2" : ""}>
-              <FieldInput
-                // Remounts (resetting local input state) only when the
-                // committed value actually changes from outside — never
-                // mid-typing, since onChange only updates local state.
-                key={JSON.stringify(entry.fields[field.key] ?? null)}
-                definition={field}
-                value={entry.fields[field.key]}
-                hidden={entry.hiddenFieldKeys.includes(field.key)}
-                onCommit={(value) => onUpdate({ fields: { [field.key]: value } })}
-                onToggleHidden={() => toggleFieldHidden(field.key)}
-              />
-            </div>
-          ))}
+          {definition.entryFields.map((field) => {
+            const value = entry.fields[field.key];
+
+            return (
+              <div key={field.key} className={field.type === "textarea" || field.type === "list" ? "sm:col-span-2" : ""}>
+                <FieldInput
+                  // Remounts (resetting local input state) only when the
+                  // committed value actually changes from outside — never
+                  // mid-typing, since onChange only updates local state.
+                  key={JSON.stringify(value ?? null)}
+                  definition={field}
+                  value={value}
+                  hidden={entry.hiddenFieldKeys.includes(field.key)}
+                  onCommit={(nextValue) => onUpdate({ fields: { [field.key]: nextValue } })}
+                  onToggleHidden={() => toggleFieldHidden(field.key)}
+                />
+
+                {field.type === "textarea" && AI_IMPROVABLE_TEXTAREA_SECTIONS.includes(sectionType) && (
+                  <AiImproveButton
+                    versionId={versionId}
+                    section={sectionType.toLowerCase() as "summary" | "experience" | "projects" | "achievements"}
+                    originalText={typeof value === "string" ? value : ""}
+                    onAccept={(text) => onUpdate({ fields: { [field.key]: text } })}
+                  />
+                )}
+
+                {sectionType === "SKILLS" && field.key === "skills" && (
+                  <AiImproveSkillsButton
+                    versionId={versionId}
+                    onAccept={(category, skills) => onUpdate({ fields: { category, skills } })}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -10,7 +10,7 @@ import { fromDynamicResumeDocument, mergeOptimizedSectionsIntoDocument, mergeRew
 function emptyResumeDocument(): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
+    personalInformation: { name: null, headline: null, email: null, phone: null, location: null, linkedin: null, github: null, website: null },
     sections: [],
   };
 }
@@ -82,6 +82,13 @@ describe("toDynamicResumeDocument", () => {
 
     expect(document.sections.map((s) => s.type)).toEqual(["SUMMARY", "ACHIEVEMENTS"]);
     expect(document.sections.map((s) => s.order)).toEqual([0, 1]);
+  });
+
+  // Phase 25 Milestone 1 — legacy Resume has no headline field, so a
+  // freshly-migrated document always starts with headline: null.
+  it("sets headline to null — the legacy Resume schema has no equivalent field", () => {
+    const document = toDynamicResumeDocument(emptyResume());
+    expect(document.personalInformation.headline).toBeNull();
   });
 
   it("every generated entry defaults to visible with no hidden fields or custom fields", () => {
@@ -164,6 +171,18 @@ describe("fromDynamicResumeDocument", () => {
     const derived = fromDynamicResumeDocument(document, emptyResume());
     expect(derived.contact.name).toBe("Updated Name");
     expect(derived.contact.email).toBe("updated@example.com");
+  });
+
+  // Phase 25 Milestone 1 — headline is a dynamic-document-only field
+  // with no legacy Resume.contact slot; it must never leak onto the
+  // derived legacy shape (see resume-migration.ts's explicit
+  // destructure, not a blanket spread, of personalInformation).
+  it("never leaks headline onto the derived legacy contact shape", () => {
+    const document = updatePersonalInformation(emptyResumeDocument(), { name: "Jane Doe", headline: "Senior Backend Engineer" });
+    const derived = fromDynamicResumeDocument(document, emptyResume());
+
+    expect(document.personalInformation.headline).toBe("Senior Backend Engineer");
+    expect(derived.contact).not.toHaveProperty("headline");
   });
 
   it("a section type the legacy schema has no slot for (e.g. AWARDS) does not throw and is simply not represented", () => {

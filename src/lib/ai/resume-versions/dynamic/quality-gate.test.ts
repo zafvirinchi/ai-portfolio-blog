@@ -17,7 +17,7 @@ function section(overrides: Partial<ResumeSection> = {}): ResumeSection {
 function document(sections: ResumeSection[], overrides: Partial<DynamicResumeDocument["personalInformation"]> = {}): DynamicResumeDocument {
   return {
     schemaVersion: DYNAMIC_RESUME_SCHEMA_VERSION,
-    personalInformation: { name: "Jane Doe", email: "jane@example.com", phone: "+1 555 0100", location: null, linkedin: null, github: null, website: null, ...overrides },
+    personalInformation: { name: "Jane Doe", headline: null, email: "jane@example.com", phone: "+1 555 0100", location: null, linkedin: null, github: null, website: null, ...overrides },
     sections,
   };
 }

@@ -10,8 +10,21 @@ import { SectionType } from "../dynamic/dynamic-resume-schema";
 // exactly like sections_data was added in the previous milestone — one
 // additive column, no new table, no second persistence system.
 
-export const TEMPLATE_IDS = ["modern", "executive", "classic", "minimal", "technical", "gcc"] as const;
+export const TEMPLATE_IDS = ["modern", "executive", "classic", "minimal", "technical", "gcc", "graduate", "academic"] as const;
 export type TemplateId = (typeof TEMPLATE_IDS)[number];
+
+// Phase 25 Milestone 1 — structured, filterable template metadata (the
+// Template Gallery's category chips / ATS-only / one-page toggles read
+// these directly, rather than parsing the free-text `recommendedFor`
+// string). Additive to every existing template; no rendering code
+// changes based on these — layout/rendering stays driven entirely by
+// the existing layout/accent/font/headerAlign/sectionHeadingStyle
+// fields below, exactly as before this milestone.
+export const TEMPLATE_CATEGORIES = ["ATS_CLASSIC", "PROFESSIONAL", "MODERN", "EXECUTIVE", "TECH", "GRADUATE", "GCC_PROFESSIONAL", "ACADEMIC"] as const;
+export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
+
+export const EXPERIENCE_LEVELS = ["entry", "mid", "senior", "executive"] as const;
+export type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
 
 // A small, closed palette — never an arbitrary color picker. Every
 // value below was chosen to keep body/heading text at a safe contrast
@@ -100,4 +113,11 @@ export interface TemplateDefinition {
   /** Template-intrinsic visual flavor — NOT a user-configurable setting (only accent/font/fontSize/spacing/atsMode/pageLength are, per §9–§11's deliberately small, safe control set). Distinguishes the 5 templates from each other beyond color/font alone. */
   headerAlign: "left" | "center";
   sectionHeadingStyle: "accent-left-border" | "centered-divider" | "underline" | "plain-caps";
+  /** Structured classification for the Template Gallery's filters — see the module-level comment above `TEMPLATE_CATEGORIES`. */
+  category: TemplateCategory;
+  experienceLevels: ExperienceLevel[];
+  /** Structured, filterable tags (e.g. "general", "technology", "gcc", "academic") — distinct from `recommendedFor`, which stays free-text display copy. */
+  industries: string[];
+  /** Informational only — whether this template's default density/spacing is well-suited to a single page. Never enforced by the renderer (pageLength in TemplateSettings already covers that); purely a gallery filter hint. */
+  isOnePage: boolean;
 }

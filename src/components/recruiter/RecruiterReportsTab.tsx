@@ -13,20 +13,28 @@ type Props = {
   jobs: RecruiterJobRecord[];
 };
 
-// Phase 18 Milestone 8, Step 11 — these 5 links (unlike the single-
-// candidate PDF report below, which has no entitlement gate at all)
-// hit /api/ai/recruiter/export, gated by recruiter.export/
-// recruiter.hiring_report since M5. A plain <a href> can't intercept a
-// 402 JSON rejection — the browser just navigates the whole tab to raw
-// JSON. Converted to fetch+blob (downloadExport(), extracted Phase 19
-// M5 into export-download.ts once this same pattern was needed a 2nd
-// and 3rd time elsewhere) so a rejection renders UpgradePrompt inline
-// instead, without changing the SUCCESS path's actual file-saving
-// behavior at all (still a real browser download, same filename, same
-// content-type). Deliberately NOT applied to the "Download Candidate
-// Report" link below — that route has no entitlement gate to intercept
-// in the first place (verified this milestone), so converting it would
-// add complexity with nothing to fix.
+// Phase 18 Milestone 8, Step 11 — these links hit /api/ai/recruiter/export,
+// gated by recruiter.export/recruiter.hiring_report since M5. A plain
+// <a href> can't intercept a 402 JSON rejection — the browser just
+// navigates the whole tab to raw JSON. Converted to fetch+blob
+// (downloadExport(), extracted Phase 19 M5 into export-download.ts once
+// this same pattern was needed a 2nd and 3rd time elsewhere) so a
+// rejection renders UpgradePrompt inline instead, without changing the
+// SUCCESS path's actual file-saving behavior at all (still a real
+// browser download, same filename, same content-type).
+//
+// Phase 25 Milestone 4 — genuine defect fix: the "Download Candidate
+// Report" link below was PREVIOUSLY left as a raw <a href>, reasoning
+// its route "has no entitlement gate to intercept." That reasoning only
+// considered the 402 case — re-verified this milestone that
+// /api/ai/recruiter/candidates/[candidateId]/export still calls
+// requireRecruiterId() and returns real JSON on 401 (unauthenticated)
+// and 404 (candidate not found / belongs to another recruiter — the
+// same ownership-filtered ID that IS enforced there), plus 422 on a
+// render failure — the exact same "browser navigates to raw JSON" bug
+// class this file's other links were already fixed for, just via a
+// different status code. Now uses the same handleExport()/downloadExport()
+// path as every other button in this component.
 export default function RecruiterReportsTab({ candidates, jobs }: Props) {
   const [selectedId, setSelectedId] = useState("");
   const [exportJobId, setExportJobId] = useState("");
@@ -159,12 +167,15 @@ export default function RecruiterReportsTab({ candidates, jobs }: Props) {
           </select>
 
           {selectedId ? (
-            <a
-              href={`/api/ai/recruiter/candidates/${selectedId}/export`}
-              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
+            <button
+              type="button"
+              onClick={() => handleExport("candidate-report-pdf", `/api/ai/recruiter/candidates/${selectedId}/export`, "candidate-report.pdf")}
+              disabled={pendingExport === "candidate-report-pdf"}
+              aria-label="Download candidate report as PDF"
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Download Candidate Report
-            </a>
+              {pendingExport === "candidate-report-pdf" ? "Downloading..." : "Download Candidate Report"}
+            </button>
           ) : (
             <button disabled className="rounded-xl bg-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-400">
               Download Candidate Report
